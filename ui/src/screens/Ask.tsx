@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, useApi, useUser, type Json } from "../api";
 import { BarChart } from "../components/BarChart";
 import { Certificate } from "../components/Certificate";
@@ -14,6 +15,15 @@ export function Ask() {
   const [answer, setAnswer] = useState<Json | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [params] = useSearchParams();
+  const questionId = params.get("question_id");
+  useEffect(() => {
+    if (!questionId) return;
+    api(`/answers/${questionId}`).then((a) => {
+      setAnswer(a);
+      setQ(a.question);
+    });
+  }, [questionId]);
 
   async function ask(text: string) {
     setQ(text);

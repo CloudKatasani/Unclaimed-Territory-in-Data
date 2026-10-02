@@ -1,0 +1,22 @@
+{
+  "dimensions": [],
+  "filters": [
+    {
+      "dimension": "substation_id",
+      "op": "=",
+      "value": "S-05"
+    }
+  ],
+  "matched_terms": [
+    "saifi"
+  ],
+  "metrics": [
+    "saifi"
+  ],
+  "product": "dp.outage_reliability",
+  "requested_terms": [
+    "saifi"
+  ],
+  "time_window": "last_month",
+  "unmatched": []
+}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, fmt, useAction, useApi, useUser, type Json } from "../api";
 import { Graph } from "../components/Graph";
 import { Empty, PassFail, Pill, Section } from "../components/ui";
@@ -145,7 +146,8 @@ function EventDetail({ id }: { id: string }) {
 export function Drift() {
   const events = useApi<Json[]>(["drift-events"], "/drift/events");
   const simulate = useAction(() => api("/drift/simulate", { method: "POST" }));
-  const [sel, setSel] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [sel, setSel] = useState<string | null>(params.get("event"));
   const current = sel ?? events.data?.[0]?.event_id ?? null;
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_1fr]">

@@ -1,0 +1,19 @@
+{
+  "dimensions": [],
+  "filters": [],
+  "matched_terms": [
+    "no consumption",
+    "feeder was out",
+    "meters_with_zero_usage"
+  ],
+  "metrics": [
+    "meters_with_zero_usage"
+  ],
+  "product": "dp.meter_outage_exposure",
+  "requested_terms": [
+    "no consumption",
+    "feeder was out"
+  ],
+  "time_window": null,
+  "unmatched": []
+}

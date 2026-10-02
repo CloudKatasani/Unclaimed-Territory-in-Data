@@ -50,3 +50,10 @@ def test_s04_sentence_turns_amber_after_restatement(template: Path) -> None:
         assert "S-04" in amber["sentence"]
     finally:
         app.close()
+
+
+def test_answer_payload_carries_narrative_and_decision(app: Tessera) -> None:
+    d = app.answer.ask(Q1, "alice").as_dict()
+    assert len(d["narrative"]) == 3 and "decision" in d
+    m = app.answer.ask("Should I request mutual aid for substation S-04 tonight?", "priya").as_dict()
+    assert m["decision"]["decision"] == "storm_restoration_crew_allocation" and m["narrative"]

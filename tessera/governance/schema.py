@@ -137,6 +137,18 @@ META_DDL: dict[str, str] = {
         "result_hash VARCHAR, consumer VARCHAR, served_at TIMESTAMP, status VARCHAR, restated_at TIMESTAMP, "
         "restated_detail VARCHAR"
     ),
+    "consumers": (
+        "consumer_id VARCHAR PRIMARY KEY, kind VARCHAR, owner VARCHAR, title VARCHAR, fqn_refs VARCHAR, "
+        "artifact_text VARCHAR, pinned_version INTEGER, sunset_at TIMESTAMP"
+    ),
+    "migrations": (
+        "migration_id VARCHAR PRIMARY KEY, consumer_id VARCHAR, product_fqn VARCHAR, from_version INTEGER, "
+        "to_version INTEGER, old_text VARCHAR, new_text VARCHAR, divergence DOUBLE, shadow_json VARCHAR, "
+        "status VARCHAR, created_at TIMESTAMP, decided_at TIMESTAMP, decided_by VARCHAR"
+    ),
+    "semantic_renames": "product_fqn VARCHAR, old_name VARCHAR, new_name VARCHAR, version INTEGER, created_at TIMESTAMP",
+    "answer_payloads": "question_id VARCHAR PRIMARY KEY, payload_json VARCHAR",
+    "demo_progress": "step INTEGER PRIMARY KEY, ran_at TIMESTAMP, result_json VARCHAR",
     "seed_info": "key VARCHAR PRIMARY KEY, value VARCHAR",
     "consumer_settings": "consumer VARCHAR PRIMARY KEY, materiality_pct DOUBLE",
     "benchmark_questions": (

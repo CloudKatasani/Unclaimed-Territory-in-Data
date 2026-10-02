@@ -7,7 +7,7 @@ from typing import Any
 from tessera import clock
 from tessera.governance import contracts as contracts_mod
 from tessera.governance import ingestion
-from tessera.governance.contract_tests import TestResult, quality_score
+from tessera.governance.contract_tests import TestResult, quality_score, run_contract_tests
 from tessera.governance.lineage import Lineage
 from tessera.governance.provenance import Artifact, ProvenanceLedger
 from tessera.governance.semantic import SemanticModel
@@ -150,6 +150,98 @@ class Publisher:
                     "INSERT INTO meta.policies VALUES (?, 'column_mask', ?, NULL, ?, 'PII', ?, ?)",
                     [pid, fqn, p.expression or "'***'", dumps(["admin"]), p.column],
                 )
+
+    # -- versioned (possibly breaking) publish by a human owner -----------------------------------------
+    def publish_version(self, contract_yaml: str, select_sql: str, approver: str) -> dict[str, Any]:
+        contract = contracts_mod.parse(contract_yaml)
+        fqn = contract.product
+        found = contracts_mod.latest_for(self.wh, fqn)
+        if found is None:
+            raise GateRejected(f"{fqn} has no published version")
+        old_contract, old_row = found
+        if contract.version <= old_contract.version:
+            raise GateRejected(f"version must increase (published v{old_contract.version})")
+        draft = f"draft_v{contract.version}_{contract.table_name}"
+        self.wh.execute(f"CREATE SCHEMA IF NOT EXISTS {draft}")
+        self.wh.execute(f"CREATE OR REPLACE TABLE {draft}.{contract.table_name} AS {select_sql}")
+        tests = run_contract_tests(self.wh, contract, f"{draft}.{contract.table_name}")
+        failing = [t.name for t in tests if not t.passed]
+        if failing:
+            self.wh.drop_schema(draft)
+            raise GateRejected(f"v{contract.version} fails its contract tests: {failing}")
+        removed = sorted({c.name for c in old_contract.columns} - {c.name for c in contract.columns})
+        breaking = bool(removed)
+        archive = f"dp_archive.{contract.table_name}__v{old_contract.version}"
+        self.wh.execute("CREATE SCHEMA IF NOT EXISTS dp_archive")
+        self.wh.execute(f"CREATE OR REPLACE TABLE {archive} AS SELECT * FROM {fqn}")
+        old_elements = list(self.semantic.for_product(fqn))
+        swap_in(self.wh, f"{draft}.{contract.table_name}", fqn)
+        self.wh.drop_schema(draft)
+        artifact = self.ledger.record(
+            Artifact(
+                "model_sql",
+                fqn,
+                select_sql,
+                agent=f"human:{approver}",
+                approved_by=approver,
+                input_refs={
+                    "contract_version": contract.version,
+                    "renames": contract.renames,
+                    "archived_as": archive,
+                },
+                tests_run={t.name: {"passed": t.passed} for t in tests},
+            )
+        )
+        register_model(self.wh, fqn, "table", select_sql, artifact)
+        self.lineage.rebuild_for(fqn, select_sql, artifact)
+        cid = contracts_mod.save(self.wh, contract, "published")
+        contracts_mod.set_status(self.wh, cid, "published", approved_by=approver)
+        contracts_mod.set_status(self.wh, str(old_row["contract_id"]), "deprecated")
+        now = clock.naive_utc(clock.now())
+        for old, new in contract.renames.items():
+            el = self.semantic.get(fqn, old)
+            if el is None:
+                continue
+            syns = list(dict.fromkeys([*el.synonyms, old.replace("_", " ")]))
+            self.wh.execute(
+                "UPDATE meta.semantic_model SET name = ?, synonyms = ? WHERE element_id = ?",
+                [new, dumps(syns), el.element_id],
+            )
+            self.wh.execute(
+                "INSERT INTO meta.semantic_renames VALUES (?, ?, ?, ?, ?)",
+                [fqn, old, new, contract.version, now],
+            )
+        self.semantic.refresh()
+        self.wh.execute(
+            "UPDATE meta.products SET contract_id = ?, last_refreshed_at = ?, quality_score = ?, "
+            "refresh_status = 'ok', held_reason = NULL WHERE fqn = ?",
+            [cid, now, quality_score(tests), fqn],
+        )
+        self.bus.emit(
+            "product.published",
+            {
+                "fqn": fqn,
+                "contract_id": cid,
+                "restated": False,
+                "breaking": breaking,
+                "from_version": old_contract.version,
+                "to_version": contract.version,
+                "renames": contract.renames,
+                "removed": removed,
+            },
+        )
+        return {
+            "fqn": fqn,
+            "contract_id": cid,
+            "artifact_id": artifact,
+            "breaking": breaking,
+            "removed": removed,
+            "renames": contract.renames,
+            "archive": archive,
+            "old_elements": old_elements,
+            "from_version": old_contract.version,
+            "to_version": contract.version,
+        }
 
     # -- patches -------------------------------------------------------------------------------------
     def patch(self, job_id: str) -> dict[str, Any]:

@@ -10,6 +10,7 @@ from tessera.agents.certificate import CertificateService
 from tessera.agents.decision import DecisionEvaluator
 from tessera.agents.demand_miner import DemandMiner
 from tessera.agents.drift_healer import DriftHealer
+from tessera.agents.migration import MigrationAgent
 from tessera.agents.narrative import NarrativeWriter
 from tessera.agents.pipeline_builder import PipelineBuilder
 from tessera.agents.recall import RecallJob
@@ -63,6 +64,8 @@ class Tessera:
         self.answer.decisions = self.decisions
         self.answer.narrator = NarrativeWriter(self.wh, self.llm)
         self.answer.pack_verdict = lambda pack: self.market.pack_evidence(pack)["verdict"]
+        self.migration = MigrationAgent(self.wh, self.llm, self.semantic, self.policy, self.ledger)
+        self.migration.sentinel_keys = self.answer.sentinel_keys
         self.resume_clock()
         self._wire()
 
@@ -70,6 +73,8 @@ class Tessera:
         keys = self.sentinels.keys()
         self.answer.sentinel_keys = keys
         self.recall.sentinel_keys = keys
+        if hasattr(self, "migration"):
+            self.migration.sentinel_keys = keys
 
     def resume_clock(self) -> None:
         latest = self.wh.scalar(
@@ -100,6 +105,23 @@ class Tessera:
         out = self.publisher.reject_patch(job_id, user_id)
         self.bus.drain()
         return out
+
+    def publish_version(self, contract_yaml: str, select_sql: str, user_id: str) -> dict[str, object]:
+        """A human owner publishes a new product version; breaking changes migrate their consumers."""
+        self.approvals.require_approver(user_id)
+        out = self.publisher.publish_version(contract_yaml, select_sql, user_id)
+        self.bus.drain()
+        migrations: list[str] = []
+        if out["breaking"]:
+            migrations = self.migration.propose(
+                str(out["fqn"]),
+                int(out["from_version"]),
+                int(out["to_version"]),
+                dict(out["renames"]),
+                list(out["old_elements"]),
+            )
+        self.bus.drain()
+        return {k: v for k, v in out.items() if k != "old_elements"} | {"migrations": migrations}
 
     def simulate_drift(self) -> dict[str, object]:
         """`make drift`: the vendor changes the feed; the ingestion check detects it; the healer runs."""

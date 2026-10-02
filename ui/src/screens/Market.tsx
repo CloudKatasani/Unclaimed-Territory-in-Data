@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, fmt, useAction, useApi, useUser, type Json } from "../api";
 import { Empty, PassFail, Pill, Section, Verdict } from "../components/ui";
 
@@ -28,7 +29,7 @@ function EvidenceStrip({ card }: { card: Json }) {
       <div className="space-y-1 text-xs">
         {e.sentence && <div className="font-medium text-slate-700">{e.sentence}</div>}
         <div className="flex flex-wrap gap-1.5">
-          {e.cost_per_run != null && <Pill>{fmt(e.cost_per_run)} credits / run</Pill>}
+          {e.cost_per_run != null && <Pill>{Number(e.cost_per_run).toFixed(4)} credits / run</Pill>}
           {(e.required_products ?? []).map((p: string) => <Pill key={p}>{p}</Pill>)}
           {e.trial && <Pill tone="accent">trial: {e.trial.status}</Pill>}
         </div>
@@ -111,7 +112,7 @@ export function ListingDrawer({ id, onClose }: { id: string; onClose: () => void
                   <tbody>
                     {l.history.map((h: Json) => (
                       <tr key={h.evaluation_id}>
-                        <td>v{h.version}</td><td>{(h.accuracy * 100).toFixed(1)}%</td><td>{fmt(h.n)}</td><td>{fmt(h.avg_cost)}</td>
+                        <td>v{h.version}</td><td>{(h.accuracy * 100).toFixed(1)}%</td><td>{fmt(h.n)}</td><td>{Number(h.avg_cost).toFixed(4)}</td>
                         <td>{h.evaluated_at.slice(0, 10)}</td><td className="font-mono text-xs">{h.signature.slice(0, 12)}…</td>
                       </tr>
                     ))}
@@ -164,7 +165,9 @@ export function TrialStrip({ agent, trial }: { agent: string; trial: Json }) {
 
 export function Market({ only }: { only?: string }) {
   const listings = useApi<Json[]>(["listings"], "/market/listings");
-  const [open, setOpen] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [open, setOpen] = useState<string | null>(params.get("open"));
+  useEffect(() => setOpen(params.get("open")), [params]);
   const kinds = only ? KINDS.filter((k) => k.kind === only) : KINDS;
   return (
     <div className="space-y-6">

@@ -55,6 +55,28 @@ def seed_history(db_path: Path) -> None:
             seed_benchmark(app.wh, app.answer)
             app.market.seed()
             evaluate_agent(app.wh, app.answer, app.market.agent_spec("outage_copilot", 1))
+            seed_consumers(app)
         app.wh.execute("CHECKPOINT")
     finally:
         app.close()
+
+
+def seed_consumers(app: object) -> None:
+    """Registered consumers of dp.outage_reliability (what a breaking change must migrate)."""
+    import re as _re
+
+    from tessera.jsonutil import dumps
+    from tessera.llm.client import prompt_text
+    from tessera.seed import domain as D
+
+    wh = app.wh  # type: ignore[attr-defined]
+    examples = "\n".join(_re.findall(r"```json\n(.*?)```", prompt_text("answer.plan"), _re.S))
+    for c in D.CONSUMERS:
+        artifact = c["artifact"]
+        text = (
+            examples if c["kind"] == "agent" else (artifact if isinstance(artifact, str) else dumps(artifact))
+        )
+        wh.execute(
+            "INSERT INTO meta.consumers VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)",
+            [c["consumer_id"], c["kind"], c["owner"], c["title"], dumps(c["fqn_refs"]), text],
+        )

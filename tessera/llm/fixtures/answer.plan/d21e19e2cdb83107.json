@@ -1,0 +1,18 @@
+{
+  "dimensions": [
+    "substation_id"
+  ],
+  "filters": [],
+  "matched_terms": [
+    "saidi"
+  ],
+  "metrics": [
+    "saidi"
+  ],
+  "product": "dp.outage_reliability",
+  "requested_terms": [
+    "saidi"
+  ],
+  "time_window": "last_3_months",
+  "unmatched": []
+}

@@ -13,6 +13,7 @@ from tessera.api import state
 from tessera.api.deps import current_user
 from tessera.api.serialise import row, rows
 from tessera.governance import contracts as contracts_mod
+from tessera.jsonutil import loads
 from tessera.orchestrator.approvals import ApprovalError
 from tessera.publisher.gate import GateRejected
 from tessera.seed.domain import USERS
@@ -416,9 +417,113 @@ def events(limit: int = 100) -> list[dict[str, Any]]:
 
 # -- demo -----------------------------------------------------------------------------------------------------
 @router.post("/demo/reset")
-def demo_reset() -> dict[str, Any]:
+def demo_reset(step: int | None = None) -> dict[str, Any]:
+    """Drop and reseed the warehouse and meta, then replay steps 0..step if given (docs/08)."""
+    from tessera.demo.conductor import run_through
+
     app = state.reset()
-    return {"ok": True, "products": [p["fqn"] for p in app.publisher.products()]}
+    results = []
+    if step is not None:
+        with state.platform() as a:
+            results = run_through(a, step)
+    return {"ok": True, "products": [p["fqn"] for p in app.publisher.products()], "replayed": results}
+
+
+@router.get("/demo/steps")
+def demo_steps() -> list[dict[str, Any]]:
+    from tessera.demo.conductor import steps_view
+
+    with state.platform() as app:
+        return steps_view(app)
+
+
+@router.post("/demo/steps/{n}/run")
+def demo_run_step(n: int) -> dict[str, Any]:
+    from tessera.demo.conductor import STEPS, run_step
+
+    if not 0 <= n < len(STEPS):
+        raise HTTPException(404, "no such step")
+    with state.platform() as app:
+        return run_step(app, n)
+
+
+@router.get("/answers/{question_id}")
+def stored_answer(question_id: str) -> dict[str, Any]:
+    """A served answer as it was delivered, with live narrative status (restated sentences turn amber)."""
+    with state.platform() as app:
+        r = app.wh.rows("SELECT payload_json FROM meta.answer_payloads WHERE question_id = ?", [question_id])
+        if not r:
+            raise HTTPException(404, "answer not found")
+        payload = loads(r[0]["payload_json"])
+        cert = payload.get("certificate")
+        if cert:
+            payload["certificate"] = app.certs.get(str(cert["cert_id"]))
+            live = {int(b["sentence_no"]): b for b in app.answer.narrator.for_cert(str(cert["cert_id"]))}
+            for sentence in payload.get("narrative", []):
+                b = live.get(int(sentence["sentence_no"]))
+                if b:
+                    sentence["status"] = b["status"]
+        return dict(payload)
+
+
+# -- consumers and migrations (docs/07 capability 5) -----------------------------------------------------------
+@router.get("/consumers")
+def consumers() -> list[dict[str, Any]]:
+    with state.platform() as app:
+        return rows(app.wh.rows("SELECT * FROM meta.consumers ORDER BY consumer_id"), ("fqn_refs",))
+
+
+@router.get("/migrations")
+def migrations(fqn: str | None = None) -> list[dict[str, Any]]:
+    with state.platform() as app:
+        sql = "SELECT * FROM meta.migrations"
+        params: list[Any] = []
+        if fqn:
+            sql += " WHERE product_fqn = ?"
+            params.append(fqn)
+        return rows(app.wh.rows(sql + " ORDER BY created_at, consumer_id", params), ("shadow_json",))
+
+
+@router.post("/migrations/{migration_id}/accept")
+def migration_accept(migration_id: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        try:
+            app.approvals.require_approver(user)
+        except ApprovalError as exc:
+            raise _forbidden(exc) from exc
+        app.migration.accept(migration_id, user)
+        return {"ok": True}
+
+
+@router.post("/migrations/{migration_id}/reject")
+def migration_reject(migration_id: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        try:
+            app.approvals.require_approver(user)
+        except ApprovalError as exc:
+            raise _forbidden(exc) from exc
+        app.migration.reject(migration_id, user)
+        return {"ok": True}
+
+
+@router.post("/migrations/accept-all")
+def migration_accept_all(fqn: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        try:
+            app.approvals.require_approver(user)
+        except ApprovalError as exc:
+            raise _forbidden(exc) from exc
+        return {"accepted": app.migration.accept_all(fqn, user)}
+
+
+@router.post("/consumers/{consumer_id}/run")
+def run_consumer(consumer_id: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        try:
+            out: dict[str, Any] = app.migration.run_saved(consumer_id, user, app.answer).as_dict()
+            return out
+        except Exception as exc:  # noqa: BLE001 - surface a broken consumer to the UI
+            raise HTTPException(409, f"consumer failed: {exc}") from exc
 
 
 # -- marketplace (docs/06) ---------------------------------------------------------------------------------

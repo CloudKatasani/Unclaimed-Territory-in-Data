@@ -1,0 +1,7 @@
+{
+  "confidence": 1.0,
+  "decision": "storm_restoration_crew_allocation",
+  "scope": {
+    "substation": "S-04"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "dimensions": [],
+  "filters": [],
+  "matched_terms": [
+    "zero usage",
+    "outages",
+    "meters_with_zero_usage"
+  ],
+  "metrics": [
+    "meters_with_zero_usage"
+  ],
+  "product": "dp.meter_outage_exposure",
+  "requested_terms": [
+    "zero usage",
+    "outages"
+  ],
+  "time_window": "last_month",
+  "unmatched": []
+}

@@ -1,5 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes, useSearchParams } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useApi, UserContext, type Json } from "./api";
 import { Ask } from "./screens/Ask";
 import { Builds } from "./screens/Builds";
@@ -10,6 +11,7 @@ import { Access } from "./screens/Access";
 import { Inbox } from "./screens/Inbox";
 import { Market } from "./screens/Market";
 import { Truth } from "./screens/Truth";
+import { CHANNEL, Conductor } from "./screens/Conductor";
 
 const NAV = [
   { to: "/market", label: "Marketplace" },
@@ -45,7 +47,30 @@ function Notifications({ user }: { user: string }) {
   );
 }
 
+/** The projector window follows the conductor (BroadcastChannel). */
+function useConductorFollow() {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  useEffect(() => {
+    const ch = new BroadcastChannel(CHANNEL);
+    ch.onmessage = (e) => {
+      if (e.data?.navigate) {
+        qc.invalidateQueries();
+        navigate(e.data.navigate);
+      }
+    };
+    return () => ch.close();
+  }, [navigate, qc]);
+}
+
 export default function App() {
+  const location = useLocation();
+  if (location.pathname === "/conduct") return <Conductor />;
+  return <Shell />;
+}
+
+function Shell() {
+  useConductorFollow();
   const [params, setParams] = useSearchParams();
   const [user, setUserState] = useState(params.get("user") ?? "alice");
   const users = useApi<Json[]>(["users"], "/users");

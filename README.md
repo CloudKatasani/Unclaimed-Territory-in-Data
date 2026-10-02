@@ -6,7 +6,8 @@ agents build; agents heal pipelines under schema drift behind a verified gate.
 
 > **Confidential.** Supports pending invention disclosures — see `CLAUDE.md`. Keep this repository private.
 
-Specs: `docs/00-overview.md` … `docs/08-client-demo.md`. Demo script: `scripts/demo_walkthrough.md`.
+Specs: `docs/00-overview.md` … `docs/08-client-demo.md`. Demo script (12 steps, conductor):
+`scripts/demo_walkthrough.md`.
 
 ## Quick start
 
@@ -30,9 +31,12 @@ make check      # ruff + mypy --strict + pytest
 | M3 | Demand Miner (ID-1) | done — `tests/test_m3_demand.py` |
 | M4 | Pipeline Builder + Publisher (A1) | done — `tests/test_m4_build.py` |
 | M5 | Drift Healer (ID-2) | done — `tests/test_m5_drift.py` |
-| M6 | UI + end-to-end storyline | done — `tests/test_m6_e2e.py` (API-level) |
-| M7 | Snowflake adapter (optional) | adapter skeleton only |
-| M8–M11 | Marketplace, recall, sentinels, decision-first, narratives, migration, conductor | not started |
+| M6 | UI + end-to-end storyline | done — `tests/test_m6_e2e.py` (API-level; browser run checked manually) |
+| M7 | Snowflake adapter (optional) | adapter skeleton only, untested (no credentials) |
+| M8 | Marketplace, entitlement bundles, SLA credits, recall notices | done — `tests/test_m8_market.py`, `tests/test_m8_recall.py` |
+| M9 | Sentinel records, agent evaluation, shadow trials | done — `tests/test_m9_sentinel.py`, `tests/test_m9_agents.py` |
+| M10 | Decision-first answers, verified narratives | done — `tests/test_m10_decision.py`, `tests/test_m10_narrative.py` |
+| M11 | Consumer migration, demo conductor, reset/replay | done — `tests/test_m11_migration.py`, `tests/test_m11_conductor.py` |
 
 ## Design notes and deviations
 
@@ -55,3 +59,20 @@ make check      # ruff + mypy --strict + pytest
 - **Extra meta tables** beyond `docs/02`: `models`, `products`, `catalog_columns`, `foreign_keys`,
   `schema_snapshots`, `drift_events`, `patch_candidates`, `patches`, `build_jobs`, `notifications`,
   `metrics`, `events`, `rejections`, `llm_calls`.
+- **Seeded history and scripted events.** Two exports served before the demo (Alice, 28 Sep: August SAIDI by
+  substation; Raj, 29 Sep: August SAIFI) feed the recall; a 1–2 Oct storm on S-04 feeders puts NORTH's
+  month-to-date SAIDI just under its 120-minute target; 14 sentinel rows (`SNTL-` keys) live in the feed and
+  outage table and are excluded from every served answer and from the M0 seed counts.
+- **Agent evidence.** Accuracy is measured by replaying a seeded ground-truth benchmark (gold plans executed
+  under each asker's policies), not quoted. Today's mock planner scores 100% on it; the spec's 97.2% / 1,240
+  figures are illustrative and are not hard-coded anywhere. outage_copilot v2 carries a tighter retrieval budget
+  (`runtime.retrieval_top_k: 8`) — the measured cost change is about −2%, not the spec's illustrative −18%.
+  Trials report new capability (questions only the candidate answers) separately from regressions; only
+  regressions count against the promotion gate.
+- **Entitlement bundles.** A bundle is the agent's declared products plus the products its own replayed queries
+  touched (recorded at evaluation): that is how subscribing Alice to v1 yields the spec's two leases.
+- **Recall scope.** Besides Alice's export, Deshawn's zero-usage answer (no time window, so it spans August) is
+  legitimately recalled too; the acceptance tests check "exactly one for Alice, none for Raj".
+- **Breaking changes.** `dp.outage_reliability` v2 renames `saidi` → `saidi_minutes` (declared via a new optional
+  contract field `renames`) and adds `cause_category`; v1 is archived as `dp_archive.outage_reliability__v1`;
+  the old semantic name remains a deprecated alias until consumers migrate.

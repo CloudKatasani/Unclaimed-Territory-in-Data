@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useApi, type Json } from "../api";
+import { useSearchParams } from "react-router-dom";
+import { api, fmt, useAction, useApi, useUser, type Json } from "../api";
 import { Empty, PassFail, Pill, Section } from "../components/ui";
 
 const STEPS = ["drafted", "generating", "testing", "gate", "published"];
@@ -69,11 +70,78 @@ function BuildDetail({ id }: { id: string }) {
   );
 }
 
+function Migrations() {
+  const { user } = useUser();
+  const migs = useApi<Json[]>(["migrations"], "/migrations");
+  const consumers = useApi<Json[]>(["consumers"], "/consumers");
+  const acceptAll = useAction((fqn: string) => api(`/migrations/accept-all?fqn=${fqn}`, { method: "POST", user }));
+  const accept = useAction((id: string) => api(`/migrations/${id}/accept`, { method: "POST", user }));
+  const reject = useAction((id: string) => api(`/migrations/${id}/reject`, { method: "POST", user }));
+  const runSaved = useAction((id: string) => api(`/consumers/${id}/run`, { method: "POST", user: "alice" }));
+  const fqns = [...new Set((migs.data ?? []).map((m) => m.product_fqn))];
+  return (
+    <div className="space-y-4">
+      {(migs.data ?? []).length === 0 && <Empty>No breaking changes published. Consumers registered: {(consumers.data ?? []).length}.</Empty>}
+      {fqns.map((fqn) => {
+        const list = (migs.data ?? []).filter((m) => m.product_fqn === fqn);
+        return (
+          <Section key={fqn} title={`Consumer migrations · ${fqn} v${list[0].from_version} → v${list[0].to_version}`}
+            right={list.some((m) => m.status === "proposed") && (user === "raj" || user === "admin") ? (
+              <button className="btn-primary" onClick={() => acceptAll.mutate(fqn)}>Accept all</button>
+            ) : undefined}>
+            <div className="space-y-3">
+              {list.map((m) => (
+                <div key={m.migration_id} className="rounded-md border border-slate-200 p-3" data-testid="migration">
+                  <div className="flex items-center justify-between">
+                    <div className="font-mono text-sm">{m.consumer_id}</div>
+                    <div className="flex items-center gap-2">
+                      <PassFail ok={m.divergence === 0} label={`shadow divergence ${fmt(m.divergence)}`} />
+                      <Pill>{m.status}</Pill>
+                      {m.status === "proposed" && (user === "raj" || user === "admin") && (
+                        <>
+                          <button className="btn" onClick={() => accept.mutate(m.migration_id)}>Accept</button>
+                          <button className="btn" onClick={() => reject.mutate(m.migration_id)}>Hold on v{m.from_version}</button>
+                        </>
+                      )}
+                      {m.consumer_id.startsWith("saved:") && (
+                        <button className="btn" onClick={() => runSaved.mutate(m.consumer_id)}>Run saved question</button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2">
+                    <pre className="code max-h-40 whitespace-pre-wrap">{m.old_text}</pre>
+                    <pre className="code max-h-40 whitespace-pre-wrap">{m.new_text}</pre>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">Shadow run: {m.shadow_json.old_rows} rows on v{m.from_version} vs {m.shadow_json.new_rows} rows on v{m.to_version}</div>
+                </div>
+              ))}
+              {runSaved.data && <div className="text-sm text-emerald-700">Alice's saved question answered with {runSaved.data.rows.length} rows · certificate {runSaved.data.certificate?.verdict}</div>}
+              {runSaved.error && <div className="text-sm text-rose-700">{String(runSaved.error.message)}</div>}
+            </div>
+          </Section>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Builds() {
   const builds = useApi<Json[]>(["builds"], "/builds");
-  const [sel, setSel] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get("tab") ?? "builds");
+  const [sel, setSel] = useState<string | null>(params.get("job"));
   const current = sel ?? builds.data?.[0]?.job_id ?? null;
+  const tabs = (
+    <div className="mb-4 flex gap-2">
+      {["builds", "migrations"].map((t) => (
+        <button key={t} className={`btn ${tab === t ? "border-accent text-accent" : ""}`} onClick={() => setTab(t)}>{t === "builds" ? "Build jobs" : "Consumer migrations"}</button>
+      ))}
+    </div>
+  );
+  if (tab === "migrations") return <div>{tabs}<Migrations /></div>;
   return (
+    <div>
+    {tabs}
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]">
       <Section title="Build jobs">
         {builds.data?.length ? (
@@ -92,6 +160,7 @@ export function Builds() {
         )}
       </Section>
       <div className="min-w-0">{current && <BuildDetail id={current} />}</div>
+    </div>
     </div>
   );
 }

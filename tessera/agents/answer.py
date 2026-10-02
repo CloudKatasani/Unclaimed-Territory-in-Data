@@ -79,6 +79,9 @@ class Answer:
             "message": self.message,
             "unmatched": self.unmatched,
             "withheld": self.withheld,
+            "tokens": self.tokens,
+            "narrative": self.narrative,
+            "decision": self.decision,
         }
 
 
@@ -466,3 +469,7 @@ class AnswerAgent:
             ],
         )
         self.bus.emit("question.logged", {"question_id": ans.question_id, "outcome": ans.outcome})
+        self.wh.execute(
+            "INSERT OR REPLACE INTO meta.answer_payloads VALUES (?, ?)",
+            [ans.question_id, dumps(ans.as_dict())],
+        )

@@ -85,6 +85,8 @@ class Contract(BaseModel):
     semantic: SemanticSpec | None = None
     sla: SlaSpec | None = None
     criticality: int = Field(default=2, ge=1, le=4)
+    # breaking-change metadata for a new version: old column/element name -> new name
+    renames: dict[str, str] = Field(default_factory=dict)
 
     @property
     def table_name(self) -> str:

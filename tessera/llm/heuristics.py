@@ -351,3 +351,10 @@ def narrative_write(v: dict[str, Any]) -> dict[str, Any]:
                 }
             )
     return {"sentences": sentences}
+
+
+@responder("migrate.prompt")
+def migrate_prompt(v: dict[str, Any]) -> dict[str, Any]:
+    from tessera.agents.migration import mock_migrate_prompt
+
+    return {"text": mock_migrate_prompt(str(v["prompt"]), dict(v["renames"]))}

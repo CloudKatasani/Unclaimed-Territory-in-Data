@@ -1,0 +1,26 @@
+{
+  "dimensions": [
+    "read_date"
+  ],
+  "filters": [
+    {
+      "dimension": "feeder_id",
+      "op": "=",
+      "value": "F-048"
+    }
+  ],
+  "matched_terms": [
+    "kwh",
+    "daily_kwh"
+  ],
+  "metrics": [
+    "daily_kwh"
+  ],
+  "product": "dp.meter_consumption_daily",
+  "requested_terms": [
+    "kwh",
+    "daily_kwh"
+  ],
+  "time_window": "last_week",
+  "unmatched": []
+}

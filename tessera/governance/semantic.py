@@ -110,7 +110,17 @@ class SemanticModel:
         return [e for e in self.elements if e.product_fqn == product]
 
     def get(self, product: str, name: str) -> Element | None:
-        return next((e for e in self.elements if e.product_fqn == product and e.name == name), None)
+        el = next((e for e in self.elements if e.product_fqn == product and e.name == name), None)
+        if el is None and hasattr(self, "wh"):
+            # deprecated alias left by a breaking rename (valid until consumers migrate)
+            new = self.wh.scalar(
+                "SELECT new_name FROM meta.semantic_renames WHERE product_fqn = ? AND old_name = ? "
+                "ORDER BY version DESC LIMIT 1",
+                [product, name],
+            )
+            if new is not None:
+                el = next((e for e in self.elements if e.product_fqn == product and e.name == new), None)
+        return el
 
     def time_dimension(self, product: str) -> Element | None:
         return next(
@@ -249,13 +259,13 @@ def compile_plan(model: SemanticModel, plan: Plan, now: datetime | None = None) 
         el = model.get(product, d)
         if el is None or el.element_type != "dimension":
             raise CompileError(f"unknown dimension {d}")
-        select.append(f"{el.expression} AS {el.name}")
+        select.append(f"{el.expression} AS {d}")
         group.append(el.expression)
     for m in plan.metrics:
         el = model.get(product, m)
         if el is None or el.element_type not in ("metric", "measure"):
             raise CompileError(f"unknown metric {m}")
-        select.append(f"{el.expression} AS {el.name}")
+        select.append(f"{el.expression} AS {m}")
     where: list[str] = []
     for f in plan.filters:
         el = model.get(product, f.dimension)

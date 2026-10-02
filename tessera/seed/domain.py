@@ -403,3 +403,86 @@ SEMANTIC: list[dict[str, Any]] = [
         "synonyms": ["region", "regions"],
     },
 ]
+
+
+# --- v2 of dp.outage_reliability (client demo step 12): `saidi` -> `saidi_minutes`, adds `cause_category` ---
+RELIABILITY_V2_SQL = (
+    RELIABILITY_SQL.replace(
+        "SELECT o.outage_id, o.feeder_id, o.start_ts, o.customers_affected,",
+        "SELECT o.outage_id, o.feeder_id, o.start_ts, o.customers_affected, o.cause_code,",
+    )
+    .replace(
+        "GROUP BY o.outage_id, o.feeder_id, o.start_ts, o.end_ts, o.customers_affected",
+        "GROUP BY o.outage_id, o.feeder_id, o.start_ts, o.end_ts, o.customers_affected, o.cause_code",
+    )
+    .replace(
+        "         COUNT(*) AS outage_count,",
+        "         COUNT(*) AS outage_count, mode(v.cause_code) AS dominant_cause,",
+    )
+    .replace(
+        "COALESCE(a.customer_minutes_interrupted, 0) / mc.customers_served AS saidi,",
+        "COALESCE(a.customer_minutes_interrupted, 0) / mc.customers_served AS saidi_minutes,",
+    )
+    .replace(
+        "COALESCE(a.customer_minutes_interrupted, 0) / NULLIF(a.customer_interruptions, 0) AS caidi",
+        "COALESCE(a.customer_minutes_interrupted, 0) / NULLIF(a.customer_interruptions, 0) AS caidi,\n"
+        "       CASE a.dominant_cause WHEN 'WEATHER' THEN 'environmental' WHEN 'VEGETATION' THEN 'environmental' "
+        "WHEN 'EQUIPMENT' THEN 'equipment' WHEN 'ANIMAL' THEN 'wildlife' WHEN 'PLANNED' THEN 'planned' END "
+        "AS cause_category",
+    )
+)
+
+RELIABILITY_V2_CONTRACT = (
+    CONTRACTS["dp.outage_reliability"]
+    .replace("version: 1", "version: 2")
+    .replace(
+        "  - {name: saidi, type: double, nullable: false}",
+        "  - {name: saidi_minutes, type: double, nullable: false}",
+    )
+    .replace(
+        "  - {name: caidi, type: double, nullable: true}",
+        "  - {name: caidi, type: double, nullable: true}\n  - {name: cause_category, type: varchar, nullable: true}",
+    )
+    .replace(
+        "    - {name: saidi_non_negative, sql: saidi >= 0}",
+        "    - {name: saidi_non_negative, sql: saidi_minutes >= 0}",
+    )
+    .replace("criticality: 4", "criticality: 4\nrenames: {saidi: saidi_minutes}")
+)
+
+# Consumers of dp.outage_reliability that a breaking change must migrate (docs/07 capability 5).
+CONSUMERS: list[dict[str, Any]] = [
+    {
+        "consumer_id": "saved:alice:saidi_by_substation",
+        "kind": "saved_question",
+        "owner": "alice",
+        "title": "SAIDI by substation, my region, last month",
+        "fqn_refs": ["dp.outage_reliability"],
+        "artifact": {
+            "product": "dp.outage_reliability",
+            "metrics": ["saidi"],
+            "dimensions": ["substation_id"],
+            "filters": [],
+            "time_window": "last_month",
+        },
+    },
+    {
+        "consumer_id": "dash.restoration_board",
+        "kind": "dashboard",
+        "owner": "priya",
+        "title": "Restoration board",
+        "fqn_refs": ["dp.outage_reliability"],
+        "artifact": "SELECT region, substation_id, SUM(customer_minutes_interrupted) / SUM(customers_served) AS "
+        "saidi_mtd, MAX(saidi) AS worst_feeder_saidi, SUM(outage_count) AS outages FROM "
+        "dp.outage_reliability WHERE month = DATE '2026-10-01' AND feeder_id NOT LIKE 'SNTL-%' "
+        "GROUP BY region, substation_id ORDER BY region, substation_id",
+    },
+    {
+        "consumer_id": "agent:outage_copilot@2",
+        "kind": "agent",
+        "owner": "raj",
+        "title": "Outage Copilot v2 planner prompt",
+        "fqn_refs": ["dp.outage_reliability", "dp.meter_outage_exposure"],
+        "artifact": None,
+    },
+]
