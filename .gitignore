@@ -9,3 +9,4 @@ data/*.duckdb.wal
 ui/node_modules/
 ui/dist/
 *.egg-info/
+ui/*.tsbuildinfo

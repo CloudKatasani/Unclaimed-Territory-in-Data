@@ -1,7 +1,7 @@
 PY ?= .venv/bin/python
 UV ?= uv
 
-.PHONY: setup seed test lint typecheck demo api ui reset drift fixtures check
+.PHONY: setup seed test lint typecheck demo api ui ui-check reset drift fixtures check
 
 setup:
 	test -d .venv || $(UV) venv .venv -p 3.11
@@ -22,6 +22,9 @@ lint:
 typecheck:
 	$(PY) -m mypy tessera
 
+ui-check:
+	cd ui && npm run typecheck && npm run build
+
 check: lint typecheck test
 
 api:
@@ -31,8 +34,9 @@ ui:
 	cd ui && npm run dev -- --port 5173
 
 demo:
-	$(PY) -m tessera.seed.generate --install
-	( $(PY) -m uvicorn tessera.api.app:app --port 8000 & cd ui && npm run dev -- --port 5173 ; kill %1 )
+	test -f data/tessera.duckdb || $(PY) -m tessera.cli reset
+	$(PY) -m uvicorn tessera.api.app:app --port 8000 & API_PID=$$!; \
+	  trap "kill $$API_PID" EXIT INT TERM; cd ui && npm run dev -- --port 5173
 
 reset:
 	$(PY) -m tessera.cli reset
@@ -41,4 +45,4 @@ drift:
 	$(PY) -m tessera.cli drift
 
 fixtures:
-	LLM_MODE=record $(PY) -m tessera.cli record-fixtures
+	$(PY) -m tessera.cli record-fixtures
