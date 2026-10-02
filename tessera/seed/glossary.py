@@ -78,9 +78,8 @@ def intent_label(concept_names: set[str]) -> str | None:
 def contract_template(concept_names: set[str]) -> str | None:
     for entry in load().get("intent_labels", []):
         if set(entry["concepts"]) == concept_names and entry.get("contract_template"):
-            return (
-                Path(__file__).resolve().parent / "contract_templates" / entry["contract_template"]
-            ).read_text()
+            name = str(entry["contract_template"])
+            return (Path(__file__).resolve().parent / "contract_templates" / name).read_text()
     return None
 
 
