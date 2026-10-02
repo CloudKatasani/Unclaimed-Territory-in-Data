@@ -11,12 +11,17 @@ from tessera.warehouse.duckdb_wh import DuckDBWarehouse
 def test_seed_row_counts(wh: DuckDBWarehouse) -> None:
     assert wh.scalar("SELECT count(DISTINCT region) FROM raw.feeders") == 3
     assert wh.scalar("SELECT count(DISTINCT substation_id) FROM raw.feeders") == 12
-    assert wh.scalar("SELECT count(*) FROM raw.feeders") == 60
-    assert wh.scalar("SELECT count(*) FROM raw.meters") == 5000
-    outages = wh.scalar("SELECT count(*) FROM raw.outage_events")
+    assert wh.scalar("SELECT count(*) FROM meta.sentinel_records") == 14
+    real = "NOT LIKE 'SNTL-%'"  # sentinel tracer rows (M9) are excluded from the seed counts
+    assert wh.scalar(f"SELECT count(*) FROM raw.feeders WHERE feeder_id {real}") == 60
+    assert wh.scalar(f"SELECT count(*) FROM raw.meters WHERE meter_id {real}") == 5000
+    outages = wh.scalar(f"SELECT count(*) FROM raw.outage_events WHERE outage_id {real}")
     assert abs(outages - 400) <= 4  # ±1%
     per_day = 24 * 60 // get_settings().read_interval_min
-    assert wh.scalar("SELECT count(*) FROM raw.ami_interval_reads") == 5000 * D.N_DAYS * per_day
+    assert (
+        wh.scalar(f"SELECT count(*) FROM raw.ami_interval_reads WHERE meter_id {real}")
+        == 5000 * D.N_DAYS * per_day
+    )
     assert wh.scalar("SELECT count(DISTINCT CAST(read_ts AS DATE)) FROM raw.ami_interval_reads") in (90, 91)
 
 

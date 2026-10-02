@@ -74,9 +74,10 @@ class DemandMiner:
         """Mock-mode intent normalisation: glossary concepts + entities + unmatched terms."""
         text = str(question["text"]).lower()
         tokens = [f"concept_{c}" for c, _ in glossary.find_concepts(text)]
-        for name, ent in glossary.entities().items():
-            if any(f" {p} " in f" {text} " for p in ent["phrases"]):
-                tokens.append(f"entity_{name}")
+        if not tokens:  # no domain concept: fall back to the entities the question is about
+            for name, ent in glossary.entities().items():
+                if any(f" {p} " in f" {text} " for p in ent["phrases"]):
+                    tokens.append(f"entity_{name}")
         if not tokens:
             plan = loads(question["plan_json"]) or {}
             tokens = [str(t).replace(" ", "_") for t in plan.get("unmatched", [])] or text.split()
@@ -213,11 +214,52 @@ class DemandMiner:
     def mine(self) -> list[str]:
         """Cluster pending questions into intents (steps 1-4 + score). Returns new intent ids."""
         created = []
-        for group in self.cluster(self.pending_questions()):
+        pending = self.attach_to_existing(self.pending_questions())
+        for group in self.cluster(pending):
             created.append(self._intent_for(group))
         if created:
             record_metric(self.wh, "id1.intents_created", len(created))
         return created
+
+    def attach_to_existing(self, questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Questions matching an existing (non-rejected) intent join it; the rest are returned."""
+        intents = self.wh.rows(
+            "SELECT intent_id, question_ids FROM meta.demand_intents WHERE status <> 'rejected' "
+            "ORDER BY created_at"
+        )
+        if not intents or not questions:
+            return questions
+        texts: dict[str, str] = {}
+        for it in intents:
+            qids = loads(it["question_ids"]) or []
+            qs = self.wh.rows(
+                f"SELECT * FROM meta.questions WHERE question_id IN ({', '.join('?' * len(qids))})", qids
+            )
+            texts[str(it["intent_id"])] = " ".join(self.normalise(q) for q in qs)
+        ids_ = list(texts)
+        docs = [texts[i] for i in ids_] + [self.normalise(q) for q in questions]
+        vec = TfidfVectorizer(token_pattern=r"[^ ]+").fit_transform(docs)
+        sims = cosine_similarity(vec[len(ids_) :], vec[: len(ids_)])
+        rest = []
+        for q, row in zip(questions, sims, strict=True):
+            best = int(np.argmax(row))
+            if 1 - row[best] <= self.settings.cluster_distance:
+                iid = ids_[best]
+                it = self.intent(iid)
+                qids = [*it["question_ids"], str(q["question_id"])]
+                score, breakdown = self.demand_score(qids)
+                req = {**it["required_elements"], "score_breakdown": breakdown}
+                self.wh.execute(
+                    "UPDATE meta.demand_intents SET question_ids = ?, demand_score = ?, "
+                    "required_elements = ? WHERE intent_id = ?",
+                    [dumps(qids), score, dumps(req), iid],
+                )
+                self.wh.execute(
+                    "UPDATE meta.questions SET intent_id = ? WHERE question_id = ?", [iid, q["question_id"]]
+                )
+            else:
+                rest.append(q)
+        return rest
 
     def _intent_for(self, group: list[dict[str, Any]]) -> str:
         qids = [str(q["question_id"]) for q in group]

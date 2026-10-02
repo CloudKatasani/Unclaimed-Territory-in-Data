@@ -520,3 +520,39 @@ def exports(user: str = Depends(current_user)) -> list[dict[str, Any]]:
             [user],
         )
         return rows(rs, ("result_json", "plan_json"))
+
+
+@router.post("/market/agents/{agent}/trials")
+def start_trial(agent: str, version: int = 2, days: int | None = None) -> dict[str, Any]:
+    with state.platform() as app:
+        try:
+            return app.trials.start(agent, version, days)
+        except KeyError as exc:
+            raise HTTPException(404, "unknown agent version") from exc
+
+
+@router.post("/market/agents/{agent}/promote")
+def promote_agent(agent: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    from tessera.market.trials import PromotionRejected
+
+    with state.platform() as app:
+        try:
+            app.approvals.require_approver(user)
+            return app.trials.promote(agent, user)
+        except ApprovalError as exc:
+            raise _forbidden(exc) from exc
+        except PromotionRejected as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+
+# -- pipeline truth (sentinels) -------------------------------------------------------------------------------
+@router.get("/sentinels")
+def sentinels() -> dict[str, Any]:
+    with state.platform() as app:
+        return {"matrix": app.sentinels.matrix(), "status": app.sentinels.status()}
+
+
+@router.post("/sentinels/verify")
+def sentinels_verify() -> dict[str, Any]:
+    with state.platform() as app:
+        return app.sentinels.verify_all()

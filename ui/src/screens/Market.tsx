@@ -103,6 +103,7 @@ export function ListingDrawer({ id, onClose }: { id: string; onClose: () => void
               )}
             </div>
             {l.kind === "agent" && l.evidence?.trial && <TrialStrip agent={l.fqn.split(".")[1]} trial={l.evidence.trial} />}
+            {l.kind === "agent" && l.status === "candidate" && !l.evidence?.trial && <StartTrial agent={l.fqn.split(".")[1]} version={l.version} />}
             {l.history?.length > 0 && (
               <Section title="Evaluation history (signed)">
                 <table className="data">
@@ -124,6 +125,18 @@ export function ListingDrawer({ id, onClose }: { id: string; onClose: () => void
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function StartTrial({ agent, version }: { agent: string; version: number }) {
+  const start = useAction(() => api(`/market/agents/${agent}/trials?version=${version}`, { method: "POST" }));
+  return (
+    <div className="flex items-center gap-2">
+      <button className="btn-primary" disabled={start.isPending} onClick={() => start.mutate()}>
+        {start.isPending ? "Running shadow trial…" : `Start shadow trial of v${version}`}
+      </button>
+      <span className="text-xs text-slate-500">Every question is answered by both versions; only the incumbent's answer is served.</span>
     </div>
   );
 }

@@ -115,6 +115,16 @@ def answer_plan(v: dict[str, Any]) -> dict[str, Any]:
         )
         if ranked and any(glossary.covers(n, _phrases(ranked[0])) for n in cov):
             metrics = [ranked[0]["name"]]
+    # a measure covering a specific concept (e.g. zero usage) beats a looser direct phrase hit
+    specific = [n for n in cov if specificity.get(n, 1) >= 2]
+    if specific:
+        best = [
+            c
+            for c in measures
+            if c["product"] == product and any(glossary.covers(n, _phrases(c)) for n in specific)
+        ]
+        if best and not any(m in [b["name"] for b in best] for m in metrics):
+            metrics = [sorted(best, key=lambda c: c["name"])[0]["name"]]
     unmatched = [p for n, p in concept_hits if n not in cov]
     dims_available = [c for c in candidates if c["product"] == product and c["type"] == "dimension"]
     dimensions: list[str] = []

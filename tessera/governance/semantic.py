@@ -150,6 +150,13 @@ class SemanticModel:
         q = question.lower()
         pool = [e for e in self.elements if products is None or e.product_fqn in products]
         hits = [e for e in pool if any(_contains_phrase(q, p) for p in e.phrases)]
+        # glossary expansion: specific domain concepts in the question pull in the elements covering them
+        from tessera.seed import glossary
+
+        specific = {c.name for c in glossary.concepts() if c.specificity >= 2}
+        for concept, _ in glossary.find_concepts(q):
+            if concept in specific:
+                hits += [e for e in pool if e not in hits and glossary.covers(concept, e.phrases)]
         hit_products = {e.product_fqn for e in hits if e.element_type in ("metric", "measure")}
         docs = [" ".join([*e.phrases, e.description.lower()]) for e in pool]
         vec = TfidfVectorizer(ngram_range=(1, 2)).fit(docs + [q])

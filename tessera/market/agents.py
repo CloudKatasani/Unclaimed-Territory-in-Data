@@ -47,6 +47,10 @@ class Evaluation(BaseModel):
     promotion_gate: PromotionGate = Field(default_factory=PromotionGate)
 
 
+class Runtime(BaseModel):
+    retrieval_top_k: int = 15
+
+
 class AgentContract(BaseModel):
     model_config = ConfigDict(extra="allow")
     agent: str
@@ -59,6 +63,7 @@ class AgentContract(BaseModel):
     requires: Requires = Field(default_factory=Requires)
     budget: Budget = Field(default_factory=Budget)
     evaluation: Evaluation = Field(default_factory=Evaluation)
+    runtime: Runtime = Field(default_factory=Runtime)
 
 
 def load_agent_spec(text: str) -> AgentContract:
@@ -80,7 +85,10 @@ DIMS = {"substation": "substation_id", "feeder": "feeder_id"}
 
 def benchmark_cases(wh: Warehouse) -> list[dict[str, Any]]:
     """Deterministic benchmark questions with gold plans (seeded ground truth)."""
-    feeders = wh.rows("SELECT feeder_id, substation_id, region FROM raw.feeders ORDER BY feeder_id")
+    feeders = wh.rows(
+        "SELECT feeder_id, substation_id, region FROM raw.feeders WHERE feeder_id NOT LIKE 'SNTL-%' "
+        "ORDER BY feeder_id"
+    )
     users = [("alice", "NORTH"), ("maria", "NORTH"), ("deshawn", "NORTH"), ("priya", None)]
     out: list[dict[str, Any]] = []
     rel = "dp.outage_reliability"
@@ -190,14 +198,14 @@ def replay_set(wh: Warehouse) -> list[dict[str, Any]]:
     return rows
 
 
-def answer_quietly(agent: AnswerAgent, text: str, user: str, scope: list[str]) -> dict[str, Any]:
+def answer_quietly(agent: AnswerAgent, text: str, user: str, scope: list[str], k: int = 15) -> dict[str, Any]:
     """Answer without logging, certificates or snapshots (evaluation and shadow trials)."""
     llm = agent.llm
     saved = llm.log_calls
     llm.log_calls = False
     t0 = time.perf_counter()
     try:
-        plan, _, _ = agent.plan(text, scope)
+        plan, _, _ = agent.plan(text, scope, k)
         tokens = agent._last_tokens
         if not plan.product or not plan.metrics or plan.unmatched:
             return {
@@ -252,7 +260,7 @@ def evaluate_agent(wh: Warehouse, agent: AnswerAgent, spec: AgentContract) -> di
     touched: set[str] = set()
     failures: list[dict[str, Any]] = []
     for c in cases:
-        r = answer_quietly(agent, str(c["text"]), str(c["asked_by"]), scope)
+        r = answer_quietly(agent, str(c["text"]), str(c["asked_by"]), scope, spec.runtime.retrieval_top_k)
         costs.append(credits(int(r["tokens"])))
         lat.append(float(r["latency"]))
         if r["hash"] == c["ground_truth_hash"]:

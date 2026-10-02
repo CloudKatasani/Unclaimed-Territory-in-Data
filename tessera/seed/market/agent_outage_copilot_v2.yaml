@@ -26,6 +26,9 @@ evaluation:
     max_divergence: 0.01
     max_cost_increase_pct: 10
 
+runtime:
+  retrieval_top_k: 8   # v2 sends fewer candidate elements to the planner: cheaper per run
+
 provenance:
   prompts: [answer.plan, narrative.write, decision.match]
   model: mock          # live mode: claude-sonnet-5-5

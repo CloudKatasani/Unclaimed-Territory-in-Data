@@ -1,0 +1,30 @@
+# Sentinel (tracer) records — docs/07 capability 2.
+# Reserved keys (SNTL-*) never reach a served answer: the Policy Engine excludes them from every query.
+# The 14 sentinel records are the outage events and interval reads; the feeder and meters are the
+# reference rows they hang off. Values are chosen to exercise edge cases: zeros, reads exactly on the
+# inclusive/exclusive outage boundaries, and max-precision decimals that a lossy cast would destroy.
+# Timestamps fall inside the drift gate's 7-day window so shadow runs see them.
+reference:
+  raw.feeders:
+    - {feeder_id: SNTL-F1, substation_id: S-04, region: NORTH, voltage_kv: 12.47}
+  raw.meters:
+    - {meter_id: SNTL-M1, premise_id: SNTL-P1, feeder_id: SNTL-F1, install_date: 2020-01-01, meter_type: residential, service_address: "0 Sentinel Way"}
+    - {meter_id: SNTL-M2, premise_id: SNTL-P2, feeder_id: SNTL-F1, install_date: 2020-01-01, meter_type: residential, service_address: "1 Sentinel Way"}
+    - {meter_id: SNTL-M3, premise_id: SNTL-P3, feeder_id: SNTL-F1, install_date: 2020-01-01, meter_type: commercial, service_address: "2 Sentinel Way"}
+records:
+  raw.outage_events:
+    - {outage_id: SNTL-O1, feeder_id: SNTL-F1, start_ts: "2026-09-30 10:00:00", end_ts: "2026-09-30 13:00:00", cause_code: WEATHER, customers_affected: 3}
+    - {outage_id: SNTL-O2, feeder_id: SNTL-F1, start_ts: "2026-10-01 08:00:00", end_ts: "2026-10-01 08:30:00", cause_code: EQUIPMENT, customers_affected: 3}
+  raw.head_end_vendor_feed:
+    - {meter_id: SNTL-M1, read_ts: "2026-09-30 10:00:00", kwh_delivered: 0.0, kwh_received: 0.0, quality_flag: ACT}          # lower bound, zero
+    - {meter_id: SNTL-M1, read_ts: "2026-09-30 11:00:00", kwh_delivered: 0.0, kwh_received: 0.0, quality_flag: ACT}
+    - {meter_id: SNTL-M1, read_ts: "2026-09-30 12:00:00", kwh_delivered: 0.0, kwh_received: 0.0, quality_flag: ACT}
+    - {meter_id: SNTL-M1, read_ts: "2026-09-30 13:00:00", kwh_delivered: 0.987654321, kwh_received: 0.0, quality_flag: ACT}  # upper bound: excluded
+    - {meter_id: SNTL-M2, read_ts: "2026-09-30 10:00:00", kwh_delivered: 0.123456789, kwh_received: 0.0, quality_flag: ACT}  # max precision in window
+    - {meter_id: SNTL-M2, read_ts: "2026-09-30 11:00:00", kwh_delivered: 0.0, kwh_received: 0.0, quality_flag: ACT}
+    - {meter_id: SNTL-M2, read_ts: "2026-09-30 12:00:00", kwh_delivered: 0.0, kwh_received: 0.0, quality_flag: EST}
+    - {meter_id: SNTL-M3, read_ts: "2026-09-30 10:00:00", kwh_delivered: 0.0, kwh_received: 0.0, quality_flag: ACT}
+    - {meter_id: SNTL-M3, read_ts: "2026-09-30 12:00:00", kwh_delivered: 0.0, kwh_received: 0.000000001, quality_flag: ACT}
+    - {meter_id: SNTL-M1, read_ts: "2026-10-01 08:00:00", kwh_delivered: 0.0, kwh_received: 0.0, quality_flag: ACT}
+    - {meter_id: SNTL-M2, read_ts: "2026-10-01 08:00:00", kwh_delivered: 0.333333333, kwh_received: 0.0, quality_flag: ACT}
+    - {meter_id: SNTL-M3, read_ts: "2026-10-01 08:00:00", kwh_delivered: 0.0, kwh_received: 0.0, quality_flag: ACT}

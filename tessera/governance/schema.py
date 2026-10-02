@@ -123,6 +123,15 @@ META_DDL: dict[str, str] = {
         "notice_id VARCHAR PRIMARY KEY, cert_id VARCHAR, consumer VARCHAR, old_hash VARCHAR, new_hash VARCHAR, "
         "delta_json VARCHAR, reason VARCHAR, message VARCHAR, issued_at TIMESTAMP, acknowledged_at TIMESTAMP"
     ),
+    "sentinel_records": (
+        "record_id VARCHAR PRIMARY KEY, source_fqn VARCHAR, key_column VARCHAR, key_value VARCHAR, row_json VARCHAR"
+    ),
+    "sentinel_keys": "fqn VARCHAR PRIMARY KEY, key_column VARCHAR",
+    "sentinel_expectations": "fqn VARCHAR, key_json VARCHAR, row_json VARCHAR, generated_at TIMESTAMP",
+    "sentinel_results": (
+        "result_id VARCHAR PRIMARY KEY, fqn VARCHAR, context VARCHAR, passed BOOLEAN, checked INTEGER, "
+        "mismatches_json VARCHAR, checked_at TIMESTAMP"
+    ),
     "seed_info": "key VARCHAR PRIMARY KEY, value VARCHAR",
     "consumer_settings": "consumer VARCHAR PRIMARY KEY, materiality_pct DOUBLE",
     "benchmark_questions": (

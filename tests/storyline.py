@@ -24,10 +24,14 @@ def ask_seed_questions(app: Tessera) -> dict[str, Answer]:
 def mine_and_draft(app: Tessera) -> tuple[str, str]:
     ask_seed_questions(app)
     intents = app.demand.mine()
+    if not intents:  # the batch trigger (every N unresolved questions) already mined and drafted
+        rows = app.wh.rows("SELECT intent_id FROM meta.demand_intents ORDER BY created_at")
+        intents = [str(r["intent_id"]) for r in rows]
     assert len(intents) == 1, intents
-    cid = app.demand.draft_contract(intents[0])
+    it = app.demand.intent(intents[0])
+    cid = it["contract_id"] or app.demand.draft_contract(intents[0])
     app.bus.drain()
-    return intents[0], cid
+    return intents[0], str(cid)
 
 
 def build_exposure(app: Tessera) -> str:

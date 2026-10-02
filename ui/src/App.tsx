@@ -9,6 +9,7 @@ import { Lineage } from "./screens/Lineage";
 import { Access } from "./screens/Access";
 import { Inbox } from "./screens/Inbox";
 import { Market } from "./screens/Market";
+import { Truth } from "./screens/Truth";
 
 const NAV = [
   { to: "/market", label: "Marketplace" },
@@ -20,6 +21,7 @@ const NAV = [
   { to: "/builds", label: "Builds" },
   { to: "/drift", label: "Drift" },
   { to: "/lineage", label: "Lineage" },
+  { to: "/truth", label: "Pipeline truth" },
 ];
 
 function Notifications({ user }: { user: string }) {
@@ -98,6 +100,7 @@ export default function App() {
               <Route path="/agents" element={<Market only="agent" />} />
               <Route path="/access" element={<Access />} />
               <Route path="/inbox" element={<Inbox />} />
+              <Route path="/truth" element={<Truth />} />
             </Routes>
           </main>
         </div>

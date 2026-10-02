@@ -83,3 +83,12 @@ def test_invalid_draft_triggers_fixup_then_fails_after_two_retries(app: Tessera)
     with pytest.raises(contracts_mod.ContractError):
         app.demand.draft_contract(intent_id)
     assert app.demand.intent(intent_id)["status"] == "needs_review"
+
+
+def test_later_variant_joins_existing_intent(app: Tessera) -> None:
+    intent_id, _ = mine_and_draft(app)
+    before = app.demand.intent(intent_id)["demand_score"]
+    app.answer.ask("Show dead meters during outage windows on my feeders", "priya")
+    assert app.demand.mine() == []  # no new intent
+    it = app.demand.intent(intent_id)
+    assert len(it["question_ids"]) == 4 and it["demand_score"] > before

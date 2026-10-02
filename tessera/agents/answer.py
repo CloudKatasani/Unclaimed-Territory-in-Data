@@ -101,11 +101,14 @@ class AnswerAgent:
         self.bus = bus
         self.settings = settings
         self.sentinel_keys: dict[str, str] = {}
+        self.sentinels: Any = None
         self._last_tokens = 0
 
     # -- planning ------------------------------------------------------------------------------
-    def plan(self, question: str, scope: list[str] | None = None) -> tuple[Plan, float, list[str]]:
-        candidates, retrieval = self.semantic.retrieve(question, products=scope)
+    def plan(
+        self, question: str, scope: list[str] | None = None, k: int = 15
+    ) -> tuple[Plan, float, list[str]]:
+        candidates, retrieval = self.semantic.retrieve(question, k=k, products=scope)
         variables = {
             "question": question,
             "candidates": [c.brief() for c in candidates],
@@ -252,6 +255,7 @@ class AnswerAgent:
             policy_decisions=[d.as_dict() for d in decisions],
             lineage_nodes=nodes,
             result_hash=rhash,
+            sentinel_status=self._sentinel_status(nodes),
         )
         outcome = "low_confidence" if conf < self.settings.confidence_floor else "answered"
         withheld = cert["verdict"] == "block"
@@ -273,6 +277,12 @@ class AnswerAgent:
             message,
             withheld=withheld,
         )
+
+    def _sentinel_status(self, nodes: list[str]) -> dict[str, Any]:
+        if self.sentinels is None:
+            return {}
+        tables = {n.rsplit(".", 1)[0] for n in nodes}
+        return {k: v for k, v in self.sentinels.status().items() if k in tables}
 
     def _columns_used(self, plan: Plan, decisions: list[Any]) -> list[str]:
         assert plan.product

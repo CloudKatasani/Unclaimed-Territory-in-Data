@@ -23,6 +23,7 @@ from tessera.governance.lineage import Lineage
 from tessera.governance.provenance import Artifact, ProvenanceLedger
 from tessera.governance.schema import create_meta
 from tessera.governance.semantic import SemanticModel
+from tessera.governance.sentinel import Sentinels
 from tessera.governance.signing import generate_key
 from tessera.jsonutil import dumps
 from tessera.publisher.promote import materialize
@@ -244,6 +245,8 @@ def seed(db_path: Path, settings: Settings | None = None, verbose: bool = False)
         _gen_outages(wh, rng, start, end)
         _gen_reads(wh, start, end, settings.read_interval_min)
         wh.drop_schema("seed_tmp")
+        sentinels = Sentinels(wh)
+        sentinels.generate()
         if verbose:
             print(f"raw data generated in {time.time() - t0:.1f}s")
 
@@ -292,6 +295,8 @@ def seed(db_path: Path, settings: Settings | None = None, verbose: bool = False)
                 synonyms=e.get("synonyms", []),
                 description=e.get("description", ""),
             )
+        sentinels.expect()
+        sentinels.verify_all()
         ingestion.snapshot(wh)
         snapshot_lkg(wh, settings)
         wh.execute("CHECKPOINT")

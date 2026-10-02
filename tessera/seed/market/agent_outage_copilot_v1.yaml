@@ -25,6 +25,9 @@ evaluation:
     max_divergence: 0.01
     max_cost_increase_pct: 10
 
+runtime:
+  retrieval_top_k: 15
+
 provenance:
   prompts: [answer.plan]
   model: mock          # live mode: claude-sonnet-5-5

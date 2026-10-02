@@ -10,10 +10,10 @@
   "matched_terms": [
     "zero kwh",
     "outage windows",
-    "kwh_during_outage"
+    "meters_with_zero_usage"
   ],
   "metrics": [
-    "kwh_during_outage"
+    "meters_with_zero_usage"
   ],
   "product": "dp.meter_outage_exposure",
   "requested_terms": [

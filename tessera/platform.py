@@ -17,8 +17,10 @@ from tessera.governance.lineage import Lineage
 from tessera.governance.policy import PolicyEngine
 from tessera.governance.provenance import ProvenanceLedger
 from tessera.governance.semantic import SemanticModel
+from tessera.governance.sentinel import Sentinels
 from tessera.llm.client import LLM
 from tessera.market.listings import Marketplace
+from tessera.market.trials import Trials
 from tessera.orchestrator.approvals import Approvals
 from tessera.orchestrator.bus import Bus
 from tessera.publisher.gate import Publisher
@@ -49,8 +51,18 @@ class Tessera:
         self.healer = DriftHealer(self.wh, self.llm, self.lineage, self.bus, self.settings)
         self.market = Marketplace(self.wh, self.certs)
         self.recall = RecallJob(self.wh, self.semantic, self.policy)
+        self.trials = Trials(self.wh, self.answer, self.market, self.ledger)
+        self.sentinels = Sentinels(self.wh)
+        self.healer.sentinel_check = self.sentinels.check_shadow
+        self.answer.sentinels = self.sentinels
+        self.load_sentinel_keys()
         self.resume_clock()
         self._wire()
+
+    def load_sentinel_keys(self) -> None:
+        keys = self.sentinels.keys()
+        self.answer.sentinel_keys = keys
+        self.recall.sentinel_keys = keys
 
     def resume_clock(self) -> None:
         latest = self.wh.scalar(
@@ -96,6 +108,9 @@ class Tessera:
         fqn = str(payload["fqn"])
         if not payload.get("restated"):
             self.market.list_product(fqn)
+            self.sentinels.expect([fqn])
+            self.load_sentinel_keys()
+        self.sentinels.verify(fqn)
         intent_id = payload.get("intent_id")
         if intent_id:
             self.demand.replay(str(intent_id), fqn, self.answer)
