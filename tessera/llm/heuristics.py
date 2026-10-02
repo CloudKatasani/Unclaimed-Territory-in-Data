@@ -175,3 +175,45 @@ def demand_contract(v: dict[str, Any]) -> dict[str, Any]:
     if text is None:
         raise ValueError("mock mode has no contract template for this intent; use LLM_MODE=live")
     return {"contract_yaml": text}
+
+
+# Model SQL for the storyline product. The first draft deliberately carries a classic mistake
+# (DECIMAL rounding and no COALESCE over the LEFT JOIN) so the demo shows one repair round.
+EXPOSURE_SELECT = """
+SELECT m.meter_id, o.outage_id, o.feeder_id, f.region,
+       o.start_ts AS outage_start_ts, o.end_ts AS outage_end_ts,
+       CAST(COUNT(r.read_ts) AS INTEGER) AS reads_in_window,
+       {kwh} AS kwh_in_window,
+       {flag} AS zero_usage_flag
+FROM raw.outage_events AS o
+JOIN raw.feeders AS f ON o.feeder_id = f.feeder_id
+JOIN raw.meters AS m ON m.feeder_id = f.feeder_id
+LEFT JOIN raw.ami_interval_reads AS r
+  ON r.meter_id = m.meter_id AND r.read_ts >= o.start_ts AND r.read_ts < o.end_ts
+GROUP BY m.meter_id, o.outage_id, o.feeder_id, f.region, o.start_ts, o.end_ts
+""".strip()
+EXPOSURE_BAD = EXPOSURE_SELECT.format(
+    kwh="CAST(SUM(r.kwh_delivered) AS DECIMAL(12, 1))", flag="SUM(r.kwh_delivered) = 0"
+)
+EXPOSURE_GOOD = EXPOSURE_SELECT.format(
+    kwh="CAST(COALESCE(SUM(r.kwh_delivered), 0) AS DOUBLE)", flag="COALESCE(SUM(r.kwh_delivered), 0) = 0"
+)
+
+
+def _contract_product(v: dict[str, Any]) -> str:
+    m = re.search(r"^product:\s*(\S+)", str(v["contract_yaml"]), re.M)
+    return m.group(1) if m else ""
+
+
+@responder("build.model")
+def build_model(v: dict[str, Any]) -> dict[str, Any]:
+    if _contract_product(v) != "dp.meter_outage_exposure":
+        raise ValueError("mock mode has no model template for this contract; use LLM_MODE=live")
+    return {"sql": f"CREATE TABLE {v['target']} AS\n{EXPOSURE_BAD}"}
+
+
+@responder("build.repair")
+def build_repair(v: dict[str, Any]) -> dict[str, Any]:
+    if _contract_product(v) != "dp.meter_outage_exposure":
+        raise ValueError("mock mode has no repair template for this contract; use LLM_MODE=live")
+    return {"sql": f"CREATE TABLE {v['target']} AS\n{EXPOSURE_GOOD}"}

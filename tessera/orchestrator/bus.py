@@ -15,7 +15,7 @@ from tessera import clock, ids
 from tessera.jsonutil import dumps
 from tessera.warehouse.base import Warehouse
 
-Handler = Callable[[dict[str, Any]], None]
+Handler = Callable[[dict[str, Any]], object]
 
 
 @dataclass

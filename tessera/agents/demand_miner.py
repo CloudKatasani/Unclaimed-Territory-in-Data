@@ -22,7 +22,7 @@ from tessera.governance.semantic import SemanticModel
 from tessera.jsonutil import dumps, loads
 from tessera.llm.client import LLM
 from tessera.orchestrator.bus import Bus
-from tessera.orchestrator.notify import record_metric
+from tessera.orchestrator.notify import notify, record_metric
 from tessera.seed import glossary
 from tessera.warehouse.base import Warehouse
 
@@ -366,6 +366,46 @@ class DemandMiner:
             qids,
         )
         return {"resolved": int(resolved or 0), "total": len(qids)}
+
+    def replay(self, intent_id: str, product: str, answer: Any) -> dict[str, Any]:
+        """On publish: replay every question of the intent; mark resolved ones and notify askers."""
+        it = self.intent(intent_id)
+        qids = it["question_ids"]
+        qs = self.wh.rows(
+            f"SELECT * FROM meta.questions WHERE question_id IN ({', '.join('?' * len(qids))}) "
+            "ORDER BY asked_at, question_id",
+            qids,
+        )
+        now = clock.naive_utc(clock.now())
+        for q in qs:
+            ans = answer.ask(str(q["text"]), str(q["asked_by"]), question_id=str(q["question_id"]), log=False)
+            if ans.outcome in ("answered", "low_confidence") and ans.plan.get("product") == product:
+                cert_id = ans.certificate["cert_id"] if ans.certificate else None
+                self.wh.execute(
+                    "UPDATE meta.questions SET resolved_by_product = ?, resolved_at = ?, cert_id = ? "
+                    "WHERE question_id = ?",
+                    [product, now, cert_id, q["question_id"]],
+                )
+                notify(
+                    self.wh,
+                    str(q["asked_by"]),
+                    "question_resolved",
+                    f'Your question "{q["text"]}" can now be answered from {product}.',
+                    str(q["question_id"]),
+                )
+        result = self.closure(intent_id)
+        status = "closed" if result["resolved"] == result["total"] else "partially_closed"
+        self.wh.execute("UPDATE meta.demand_intents SET status = ? WHERE intent_id = ?", [status, intent_id])
+        first = min(q["asked_at"] for q in qs)
+        hours = (now - first).total_seconds() / 3600
+        record_metric(
+            self.wh,
+            "id1.closure_rate",
+            result["resolved"] / max(1, result["total"]),
+            {"intent_id": intent_id, **result},
+        )
+        record_metric(self.wh, "id1.time_to_resolution_hours", hours, {"intent_id": intent_id})
+        return result
 
     def labels(self) -> Counter[str]:
         return Counter(str(r["label"]) for r in self.wh.rows("SELECT label FROM meta.demand_intents"))
