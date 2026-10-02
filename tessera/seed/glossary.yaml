@@ -30,3 +30,4 @@ entities:
 intent_labels:
   - concepts: [outage, zero_usage]
     label: Meters reporting zero usage during outages
+    contract_template: meter_outage_exposure.yaml

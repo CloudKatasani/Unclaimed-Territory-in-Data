@@ -141,3 +141,37 @@ def answer_plan(v: dict[str, Any]) -> dict[str, Any]:
         "requested_terms": requested,
         "matched_terms": matched,
     }
+
+
+@responder("demand.intent")
+def demand_intent(v: dict[str, Any]) -> dict[str, Any]:
+    concepts = sorted(set(v.get("concepts", [])))
+    text = " ".join(v["questions"]).lower()
+    entities = [name for name, e in glossary.entities().items() if any(_has(text, p) for p in e["phrases"])]
+    entities.sort(
+        key=lambda n: min((text.find(p) for p in glossary.entities()[n]["phrases"] if p in text), default=999)
+    )
+    label = (
+        glossary.intent_label(set(concepts))
+        or " and ".join(c.label for c in glossary.concepts() if c.name in concepts).capitalize()
+    )
+    grain = [glossary.entities()[e]["key"] for e in entities if e in ("meter", "outage")]
+    windows = [label for pat, label in TIME_PATTERNS if re.search(pat, text)]
+    return {
+        "label": label or "Unlabelled demand",
+        "entities": entities,
+        "concepts": concepts,
+        "measures": [c for c in concepts if c not in ("outage",)],
+        "grain": grain,
+        "time_window": windows[0] if windows else None,
+    }
+
+
+@responder("demand.contract")
+def demand_contract(v: dict[str, Any]) -> dict[str, Any]:
+    from tessera.agents.demand_miner import contract_from_template
+
+    text = contract_from_template(v["intent"]["concepts"])
+    if text is None:
+        raise ValueError("mock mode has no contract template for this intent; use LLM_MODE=live")
+    return {"contract_yaml": text}

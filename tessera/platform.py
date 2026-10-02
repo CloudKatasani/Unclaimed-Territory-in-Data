@@ -7,6 +7,7 @@ from pathlib import Path
 from tessera import clock
 from tessera.agents.answer import AnswerAgent
 from tessera.agents.certificate import CertificateService
+from tessera.agents.demand_miner import DemandMiner
 from tessera.config import Settings, get_settings
 from tessera.governance.catalog import Catalog
 from tessera.governance.lineage import Lineage
@@ -14,6 +15,7 @@ from tessera.governance.policy import PolicyEngine
 from tessera.governance.provenance import ProvenanceLedger
 from tessera.governance.semantic import SemanticModel
 from tessera.llm.client import LLM
+from tessera.orchestrator.approvals import Approvals
 from tessera.orchestrator.bus import Bus
 from tessera.warehouse.duckdb_wh import DuckDBWarehouse
 
@@ -33,6 +35,10 @@ class Tessera:
         self.answer = AnswerAgent(
             self.wh, self.llm, self.semantic, self.policy, self.lineage, self.certs, self.bus, self.settings
         )
+        self.demand = DemandMiner(
+            self.wh, self.llm, self.semantic, self.catalog, self.ledger, self.bus, self.settings
+        )
+        self.approvals = Approvals(self.wh, self.bus)
         self.resume_clock()
         self._wire()
 
@@ -45,7 +51,12 @@ class Tessera:
         clock.resume_after(latest)
 
     def _wire(self) -> None:
-        pass
+        self.bus.subscribe("question.logged", self._maybe_mine)
+
+    def _maybe_mine(self, payload: dict[str, object]) -> None:
+        """Demand Miner trigger: every N new unresolved questions."""
+        if len(self.demand.pending_questions()) >= self.settings.demand_batch_size:
+            self.demand.run()
 
     def close(self) -> None:
         self.wh.close()

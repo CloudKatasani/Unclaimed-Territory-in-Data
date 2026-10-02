@@ -73,3 +73,17 @@ def intent_label(concept_names: set[str]) -> str | None:
         if set(entry["concepts"]) == concept_names:
             return str(entry["label"])
     return None
+
+
+def contract_template(concept_names: set[str]) -> str | None:
+    for entry in load().get("intent_labels", []):
+        if set(entry["concepts"]) == concept_names and entry.get("contract_template"):
+            return (
+                Path(__file__).resolve().parent / "contract_templates" / entry["contract_template"]
+            ).read_text()
+    return None
+
+
+def entities() -> dict[str, dict[str, Any]]:
+    ents: dict[str, dict[str, Any]] = load().get("entities", {})
+    return ents
