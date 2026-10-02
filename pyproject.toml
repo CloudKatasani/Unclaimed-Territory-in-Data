@@ -1,0 +1,53 @@
+[project]
+name = "tessera"
+version = "0.1.0"
+description = "Governed, agentic data platform prototype"
+requires-python = ">=3.11"
+dependencies = [
+  "duckdb==1.5.6",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "pydantic>=2.7",
+  "pyyaml>=6",
+  "sqlglot==30.21.0",
+  "networkx>=3.2",
+  "cryptography>=42",
+  "scikit-learn>=1.4",
+  "numpy>=1.26",
+  "pyarrow>=15",
+  "jsonschema>=4.21",
+  "anthropic>=0.40",
+  "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10", "types-PyYAML", "types-jsonschema", "types-networkx"]
+snowflake = ["snowflake-connector-python>=3.6"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tessera*"]
+
+[tool.setuptools.package-data]
+tessera = ["llm/prompts/*.md", "llm/fixtures/**/*.json", "seed/*.yaml", "seed/*.csv"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]  # formatter owns line length; long SQL strings are fine
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

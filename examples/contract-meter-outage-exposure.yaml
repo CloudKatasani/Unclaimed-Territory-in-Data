@@ -1,0 +1,69 @@
+# Example: contract the Demand Miner should draft in storyline step 3
+# Mock fixture for prompt demand.contract must produce this (modulo ids/timestamps).
+
+product: dp.meter_outage_exposure
+version: 1
+title: Meter usage during outages
+description: >
+  For each meter and outage on its feeder, the interval reads that fell inside the outage window,
+  so users can see which meters reported zero or non-zero usage while the feeder was out.
+owner: raj
+origin: demand_miner
+demand_intent_id: "<filled at runtime>"
+
+grain: [meter_id, outage_id]
+primary_key: [meter_id, outage_id]
+
+sources:
+  - raw.meters
+  - raw.feeders
+  - raw.outage_events
+  - raw.ami_interval_reads
+
+join_path:
+  - raw.meters.feeder_id = raw.feeders.feeder_id
+  - raw.outage_events.feeder_id = raw.feeders.feeder_id
+  - raw.ami_interval_reads.meter_id = raw.meters.meter_id
+  - raw.ami_interval_reads.read_ts >= raw.outage_events.start_ts
+  - raw.ami_interval_reads.read_ts <  raw.outage_events.end_ts
+
+schema:
+  - {name: meter_id,            type: varchar,   nullable: false}
+  - {name: outage_id,           type: varchar,   nullable: false}
+  - {name: feeder_id,           type: varchar,   nullable: false}
+  - {name: region,              type: varchar,   nullable: false}
+  - {name: outage_start_ts,     type: timestamp, nullable: false}
+  - {name: outage_end_ts,       type: timestamp, nullable: false}
+  - {name: reads_in_window,     type: integer,   nullable: false}
+  - {name: kwh_in_window,       type: double,    nullable: false}
+  - {name: zero_usage_flag,     type: boolean,   nullable: false}
+
+quality:
+  freshness_sla_hours: 24
+  expectations:
+    - name: window_valid
+      sql: outage_end_ts > outage_start_ts
+    - name: kwh_non_negative
+      sql: kwh_in_window >= 0
+    - name: zero_flag_consistent
+      sql: zero_usage_flag = (kwh_in_window = 0)
+    - name: reads_non_negative
+      sql: reads_in_window >= 0
+
+foreign_keys:
+  - {column: meter_id,  references: raw.meters.meter_id}
+  - {column: outage_id, references: raw.outage_events.outage_id}
+
+policies:
+  - {kind: row_filter, expression: "region = :user.region", applies_to_roles: [ops_manager]}
+
+semantic:
+  entity: meter_outage_exposure
+  measures:
+    - {name: meters_with_zero_usage, expression: "count_if(zero_usage_flag)", certified: false}
+    - {name: kwh_during_outage,      expression: "sum(kwh_in_window)",       certified: false}
+  dimensions: [region, feeder_id, outage_id, outage_start_ts]
+  synonyms:
+    meters_with_zero_usage: ["zero usage meters", "meters reporting nothing", "dead meters during outage"]
+
+criticality: 2

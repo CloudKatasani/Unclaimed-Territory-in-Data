@@ -1,0 +1,7 @@
+question_id,asked_by,text,expected_outcome,storyline_step
+q001,alice,What was SAIDI by substation in my region last month?,answered,1
+q002,alice,Which meters reported zero usage during outages last month?,missing_data,2
+q003,maria,How many meters showed no consumption while their feeder was out?,missing_data,2
+q004,deshawn,List meters that read zero kWh during outage windows in the north region,missing_data,2
+q005,alice,What is SAIFI by feeder for the last 3 months?,answered,1
+q006,maria,Daily kWh for feeder F-017 last week,answered,1

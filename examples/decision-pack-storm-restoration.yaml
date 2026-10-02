@@ -1,0 +1,32 @@
+# Decision pack — the marketplace unit business users browse (docs/06-marketplace.md)
+decision: storm_restoration_crew_allocation
+title: Storm restoration crew allocation
+owner: priya
+question_examples:
+  - Which feeders should get crews first after tonight's storm?
+  - How many customers are still out by substation?
+  - Should I request mutual aid for substation S-04 tonight?
+
+bundle:
+  data_products: [dp.outage_reliability, dp.meter_outage_exposure, dp.meter_consumption_daily]
+  agents: [outage_copilot]
+  dashboards: [dash.restoration_board]
+
+thresholds:
+  - metric: saidi_minutes_mtd
+    scope: region
+    comparator: ">"
+    value: 120
+    meaning: Region breaches monthly SAIDI target
+    driver: outage_count_over_4h
+    sensitivity_template: "{delta} more outages over four hours this month and {scope_value} breaches its SAIDI target of {value} minutes."
+  - metric: customers_out
+    scope: substation
+    comparator: ">"
+    value: 2000
+    meaning: Escalate to mutual-aid request
+    driver: customers_affected
+    sensitivity_template: "{delta} more customers out at {scope_value} and the mutual-aid threshold of {value} is crossed."
+
+certificate:
+  aggregation: worst_of_bundle

@@ -1,0 +1,32 @@
+# Domain glossary used by the mock-mode planner and the Demand Miner to normalise questions.
+# A concept is "covered" by a semantic element when one of its phrases appears in that element's
+# name or synonyms. Specificity breaks ties when choosing the measure that answers a question.
+concepts:
+  zero_usage:
+    label: zero usage
+    specificity: 2
+    derived_from: consumption
+    phrases: [zero usage, no consumption, zero kwh, read zero, reported zero, reporting nothing,
+              no usage, dead meters, zero consumption]
+  outage:
+    label: outages
+    specificity: 1
+    phrases: [outage windows, outage window, feeder was out, outages, outage, interruption, interruptions]
+  consumption:
+    label: consumption
+    specificity: 1
+    phrases: [consumption, usage, kwh, energy use]
+  reliability:
+    label: reliability
+    specificity: 1
+    phrases: [saidi, saifi, caidi, reliability]
+# Entities a question can be "about" and the conformed table that holds them.
+entities:
+  meter: {phrases: [meters, meter], table: raw.meters, key: meter_id}
+  feeder: {phrases: [feeders, feeder], table: raw.feeders, key: feeder_id}
+  outage: {phrases: [outages, outage], table: raw.outage_events, key: outage_id}
+  substation: {phrases: [substations, substation], table: raw.feeders, key: substation_id}
+# Human-readable intent labels for common concept combinations.
+intent_labels:
+  - concepts: [outage, zero_usage]
+    label: Meters reporting zero usage during outages

@@ -1,0 +1,43 @@
+"""Warehouse protocol. Every component talks to storage through this interface."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+import pyarrow as pa
+
+
+@dataclass(frozen=True)
+class Column:
+    name: str
+    data_type: str
+    nullable: bool = True
+
+
+class Warehouse(Protocol):
+    def query(self, sql: str, params: dict[str, Any] | list[Any] | None = None) -> pa.Table: ...
+
+    def rows(self, sql: str, params: dict[str, Any] | list[Any] | None = None) -> list[dict[str, Any]]: ...
+
+    def scalar(self, sql: str, params: dict[str, Any] | list[Any] | None = None) -> Any: ...
+
+    def execute(self, sql: str, params: dict[str, Any] | list[Any] | None = None) -> None: ...
+
+    def load_rows(self, fqn: str, columns: list[str], rows: list[tuple[Any, ...]]) -> None: ...
+
+    def clone_schema(self, src: str, dst: str) -> None: ...
+
+    def clone_table(self, src_fqn: str, dst_fqn: str, where: str | None = None) -> None: ...
+
+    def table_schema(self, fqn: str) -> list[Column]: ...
+
+    def table_exists(self, fqn: str) -> bool: ...
+
+    def list_tables(self, schema: str) -> list[str]: ...
+
+    def drop_schema(self, name: str) -> None: ...
+
+    def transaction(self) -> Any: ...
+
+    def close(self) -> None: ...
