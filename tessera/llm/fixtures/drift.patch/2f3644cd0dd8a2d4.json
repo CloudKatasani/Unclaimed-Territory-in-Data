@@ -1,0 +1,9 @@
+{
+  "candidates": [
+    {
+      "expression": "CAST(energy_kwh_del AS INTEGER)",
+      "label": "cast to INTEGER (kWh as whole units)",
+      "rationale": "vendor now sends the reading as text; parse it as a whole number of kWh"
+    }
+  ]
+}

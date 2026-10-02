@@ -1,0 +1,26 @@
+{
+  "dimensions": [],
+  "filters": [
+    {
+      "dimension": "region",
+      "op": "=",
+      "value": "NORTH"
+    }
+  ],
+  "matched_terms": [
+    "zero kwh",
+    "outage windows",
+    "kwh_during_outage"
+  ],
+  "metrics": [
+    "kwh_during_outage"
+  ],
+  "product": "dp.meter_outage_exposure",
+  "requested_terms": [
+    "zero kwh",
+    "outage windows",
+    "kwh_during_outage"
+  ],
+  "time_window": null,
+  "unmatched": []
+}

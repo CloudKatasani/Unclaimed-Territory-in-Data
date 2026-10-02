@@ -1,0 +1,20 @@
+{
+  "concepts": [
+    "outage",
+    "zero_usage"
+  ],
+  "entities": [
+    "meter",
+    "feeder",
+    "outage"
+  ],
+  "grain": [
+    "meter_id",
+    "outage_id"
+  ],
+  "label": "Meters reporting zero usage during outages",
+  "measures": [
+    "zero_usage"
+  ],
+  "time_window": "last_month"
+}

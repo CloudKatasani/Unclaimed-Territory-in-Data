@@ -1,0 +1,20 @@
+{
+  "dimensions": [],
+  "filters": [],
+  "matched_terms": [
+    "outages",
+    "customers_interrupted"
+  ],
+  "metrics": [
+    "customers_interrupted"
+  ],
+  "product": "dp.outage_reliability",
+  "requested_terms": [
+    "zero usage",
+    "outages"
+  ],
+  "time_window": "last_month",
+  "unmatched": [
+    "zero usage"
+  ]
+}

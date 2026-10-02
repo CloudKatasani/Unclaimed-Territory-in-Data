@@ -1,0 +1,3 @@
+{
+  "sql": "CREATE TABLE draft.meter_outage_exposure AS\nSELECT m.meter_id, o.outage_id, o.feeder_id, f.region,\n       o.start_ts AS outage_start_ts, o.end_ts AS outage_end_ts,\n       CAST(COUNT(r.read_ts) AS INTEGER) AS reads_in_window,\n       CAST(SUM(r.kwh_delivered) AS DECIMAL(12, 1)) AS kwh_in_window,\n       SUM(r.kwh_delivered) = 0 AS zero_usage_flag\nFROM raw.outage_events AS o\nJOIN raw.feeders AS f ON o.feeder_id = f.feeder_id\nJOIN raw.meters AS m ON m.feeder_id = f.feeder_id\nLEFT JOIN raw.ami_interval_reads AS r\n  ON r.meter_id = m.meter_id AND r.read_ts >= o.start_ts AND r.read_ts < o.end_ts\nGROUP BY m.meter_id, o.outage_id, o.feeder_id, f.region, o.start_ts, o.end_ts"
+}

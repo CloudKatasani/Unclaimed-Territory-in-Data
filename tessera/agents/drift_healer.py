@@ -237,7 +237,7 @@ class DriftHealer:
             "drift.patch",
             {
                 "table": table,
-                "changes": changes,
+                "changes": [{k: v for k, v in c.items() if not k.endswith("similarity")} for c in changes],
                 "mapping_fqn": mapping["fqn"],
                 "mapping_sql": mapping_sql,
                 "deterministic": [c.expression for c in candidates],

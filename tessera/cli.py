@@ -21,6 +21,13 @@ def main() -> None:
     if args.cmd == "reset":
         print(f"reset -> {install(settings)}")
         return
+    if args.cmd == "record-fixtures":
+        from tessera.demo.conductor import record_fixtures
+
+        print(json.dumps(record_fixtures(), indent=2, default=str))
+        return
+    if not settings.db_path.exists():
+        install(settings)
     from tessera.platform import Tessera
 
     app = Tessera()
@@ -29,10 +36,6 @@ def main() -> None:
             print(json.dumps(app.simulate_drift(), indent=2, default=str))
         elif args.cmd == "verify":
             print(json.dumps(app.ledger.verify(), indent=2))
-        elif args.cmd == "record-fixtures":
-            from tessera.demo.conductor import record_fixtures
-
-            print(json.dumps(record_fixtures(app), indent=2, default=str))
     finally:
         app.close()
 
