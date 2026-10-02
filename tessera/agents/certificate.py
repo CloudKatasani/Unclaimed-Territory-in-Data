@@ -120,7 +120,8 @@ class CertificateService:
                 "last_load": clock.iso(last.replace(tzinfo=UTC)) if last else None,
                 "sla_hours": sla,
                 "age_hours": round(age, 2),
-                "pass": age <= sla,
+                # a held refresh is a freshness breach: consumers are not getting current data
+                "pass": age <= sla and p["refresh_status"] != "held",
                 "refresh_status": p["refresh_status"],
                 "held_reason": p["held_reason"],
             }
@@ -214,7 +215,68 @@ class CertificateService:
             ],
         )
         clock.advance(timedelta(milliseconds=1))
+        self._record_sla_breaches(cert)
         return self.get(cert["cert_id"])
+
+    def _record_sla_breaches(self, cert: dict[str, Any]) -> None:
+        """SLA credits (idea 21): one ledger entry per breach episode of a product that declares credits."""
+        from tessera.governance import contracts as contracts_mod
+
+        for fqn, f in cert["freshness"].items():
+            breaches = []
+            if not f["pass"]:
+                breaches.append(("freshness", f.get("held_reason") or f.get("last_load")))
+            q = cert["quality"].get(fqn, {})
+            if q and q["score"] < 0.9:
+                breaches.append(("quality", ",".join(q["failing_tests"])))
+            if not breaches:
+                continue
+            found = contracts_mod.latest_for(self.wh, fqn)
+            credits = found[0].sla.credits_per_breach if found and found[0].sla else 0
+            if not credits:
+                continue
+            for kind, episode in breaches:
+                key = f"{fqn}|{kind}|{episode}"
+                if self.wh.scalar("SELECT count(*) FROM meta.sla_ledger WHERE dedupe_key = ?", [key]):
+                    continue
+                self.wh.execute(
+                    "INSERT INTO meta.sla_ledger VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        ids.new_id(self.wh, "sla"),
+                        fqn,
+                        cert["asked_by"],
+                        kind,
+                        cert["cert_id"],
+                        float(credits),
+                        clock.naive_utc(clock.now()),
+                        key,
+                    ],
+                )
+
+    def assess(self, products: list[str]) -> dict[str, Any]:
+        """Unsigned status verdict for products (marketplace evidence); same rules as certificates."""
+        nodes: list[str] = []
+        metrics = []
+        for p in products:
+            nodes += self.lineage.upstream_columns(p, [c.name for c in self.wh.table_schema(p)])
+            for r in self.wh.rows(
+                "SELECT name, certified, certified_by FROM meta.semantic_model WHERE product_fqn = ? "
+                "AND element_type IN ('metric', 'measure')",
+                [p],
+            ):
+                metrics.append(
+                    {"name": r["name"], "certified": bool(r["certified"]), "certified_by": r["certified_by"]}
+                )
+        fresh, qual = self.product_status(products)
+        arts = self.path_artifacts(sorted(set(nodes)))
+        cert = {
+            "metrics": metrics,
+            "freshness": fresh,
+            "quality": qual,
+            "agent_authored": [a for a in arts if a["is_agent"]],
+        }
+        verdict, trace = evaluate_rules(cert, self.criticality())
+        return {"verdict": verdict, "rule_trace": trace, "freshness": fresh, "quality": qual}
 
     def get(self, cert_id: str) -> dict[str, Any]:
         rows = self.wh.rows("SELECT * FROM meta.certificates WHERE cert_id = ?", [cert_id])

@@ -66,6 +66,7 @@ class LLM:
         self.wh = wh
         self.settings = settings or get_settings()
         self.mode = self.settings.llm_mode
+        self.log_calls = True
         self.overrides: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._client: Any = None
 
@@ -113,7 +114,7 @@ class LLM:
         return LLMResult(value, prompt_id, p_sha, vhash, model_name, source, in_tok, out_tok)
 
     def _log(self, prompt_id: str, vhash: str, p_sha: str, model: str, i: int, o: int, source: str) -> None:
-        if self.wh is None:
+        if self.wh is None or not self.log_calls:
             return
         self.wh.execute(
             "INSERT INTO meta.llm_calls VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

@@ -10,6 +10,7 @@ from tessera.agents.certificate import CertificateService
 from tessera.agents.demand_miner import DemandMiner
 from tessera.agents.drift_healer import DriftHealer
 from tessera.agents.pipeline_builder import PipelineBuilder
+from tessera.agents.recall import RecallJob
 from tessera.config import Settings, get_settings
 from tessera.governance.catalog import Catalog
 from tessera.governance.lineage import Lineage
@@ -17,6 +18,7 @@ from tessera.governance.policy import PolicyEngine
 from tessera.governance.provenance import ProvenanceLedger
 from tessera.governance.semantic import SemanticModel
 from tessera.llm.client import LLM
+from tessera.market.listings import Marketplace
 from tessera.orchestrator.approvals import Approvals
 from tessera.orchestrator.bus import Bus
 from tessera.publisher.gate import Publisher
@@ -45,6 +47,8 @@ class Tessera:
         self.builder = PipelineBuilder(self.wh, self.llm, self.policy, self.ledger, self.bus, self.settings)
         self.publisher = Publisher(self.wh, self.lineage, self.ledger, self.semantic, self.bus)
         self.healer = DriftHealer(self.wh, self.llm, self.lineage, self.bus, self.settings)
+        self.market = Marketplace(self.wh, self.certs)
+        self.recall = RecallJob(self.wh, self.semantic, self.policy)
         self.resume_clock()
         self._wire()
 
@@ -63,6 +67,7 @@ class Tessera:
         self.bus.subscribe("product.published", self._on_published)
         self.bus.subscribe("drift.detected", lambda p: self.healer.heal(str(p["event_id"])))
         self.bus.subscribe("patch.ready_for_gate", lambda p: self.publisher.gate_patch(str(p["job_id"])))
+        self.bus.subscribe("patch.held", self._on_held)
 
     # -- human actions -------------------------------------------------------------------------
     def approve_patch(self, job_id: str, user_id: str) -> dict[str, object]:
@@ -88,9 +93,28 @@ class Tessera:
 
     def _on_published(self, payload: dict[str, object]) -> None:
         self.semantic.refresh()
+        fqn = str(payload["fqn"])
+        if not payload.get("restated"):
+            self.market.list_product(fqn)
         intent_id = payload.get("intent_id")
         if intent_id:
-            self.demand.replay(str(intent_id), str(payload["fqn"]), self.answer)
+            self.demand.replay(str(intent_id), fqn, self.answer)
+        if payload.get("restated"):
+            self.recall.run(fqn, str(payload.get("reason") or "upstream data restated"))
+
+    def _on_held(self, payload: dict[str, object]) -> None:
+        """A held refresh is an SLA breach: record it with a signed status certificate."""
+        for fqn in payload.get("products", []):  # type: ignore[attr-defined]
+            nodes = self.lineage.upstream_columns(str(fqn), [c.name for c in self.wh.table_schema(str(fqn))])
+            self.certs.issue(
+                question_id=f"status:{fqn}",
+                asked_by="subscribers",
+                metrics=[],
+                products=[str(fqn)],
+                policy_decisions=[],
+                lineage_nodes=nodes,
+                result_hash=None,
+            )
 
     def _maybe_mine(self, payload: dict[str, object]) -> None:
         """Demand Miner trigger: every N new unresolved questions."""

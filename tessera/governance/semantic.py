@@ -140,25 +140,31 @@ class SemanticModel:
         return eid
 
     # -- retrieval ---------------------------------------------------------------------------
-    def retrieve(self, question: str, k: int = 15) -> tuple[list[Element], float]:
-        """Synonym hits first, then TF-IDF over names/synonyms/descriptions up to k elements."""
+    def retrieve(
+        self, question: str, k: int = 15, products: list[str] | None = None
+    ) -> tuple[list[Element], float]:
+        """Synonym hits first, then TF-IDF over names/synonyms/descriptions up to k elements.
+
+        `products` limits retrieval to an agent's scope (its entitled data products).
+        """
         q = question.lower()
-        hits = [e for e in self.elements if any(_contains_phrase(q, p) for p in e.phrases)]
+        pool = [e for e in self.elements if products is None or e.product_fqn in products]
+        hits = [e for e in pool if any(_contains_phrase(q, p) for p in e.phrases)]
         hit_products = {e.product_fqn for e in hits if e.element_type in ("metric", "measure")}
-        docs = [" ".join([*e.phrases, e.description.lower()]) for e in self.elements]
+        docs = [" ".join([*e.phrases, e.description.lower()]) for e in pool]
         vec = TfidfVectorizer(ngram_range=(1, 2)).fit(docs + [q])
         sims = cosine_similarity(vec.transform([q]), vec.transform(docs))[0]
-        ranked = sorted(range(len(self.elements)), key=lambda i: (-sims[i], self.elements[i].element_id))
+        ranked = sorted(range(len(pool)), key=lambda i: (-sims[i], pool[i].element_id))
         chosen: list[Element] = list(hits)
         # all dimensions of products that have a measure hit, so the plan can group and filter
-        for e in self.elements:
+        for e in pool:
             if e.product_fqn in hit_products and e.element_type == "dimension" and e not in chosen:
                 chosen.append(e)
         for i in ranked:
             if len(chosen) >= max(k, len(hits)):
                 break
-            if self.elements[i] not in chosen and sims[i] > 0:
-                chosen.append(self.elements[i])
+            if pool[i] not in chosen and sims[i] > 0:
+                chosen.append(pool[i])
         score = float(max(sims)) if len(sims) else 0.0
         chosen.sort(key=lambda e: (e.product_fqn, e.element_type, e.name))
         return chosen, round(score, 4)

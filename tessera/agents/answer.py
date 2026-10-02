@@ -60,6 +60,7 @@ class Answer:
     message: str = ""
     unmatched: list[str] = field(default_factory=list)
     withheld: bool = False
+    tokens: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -100,16 +101,18 @@ class AnswerAgent:
         self.bus = bus
         self.settings = settings
         self.sentinel_keys: dict[str, str] = {}
+        self._last_tokens = 0
 
     # -- planning ------------------------------------------------------------------------------
-    def plan(self, question: str) -> tuple[Plan, float, list[str]]:
-        candidates, retrieval = self.semantic.retrieve(question)
+    def plan(self, question: str, scope: list[str] | None = None) -> tuple[Plan, float, list[str]]:
+        candidates, retrieval = self.semantic.retrieve(question, products=scope)
         variables = {
             "question": question,
             "candidates": [c.brief() for c in candidates],
             "today": clock.naive_utc(clock.now()).date().isoformat(),
         }
         res = self.llm.complete_json("answer.plan", variables, Plan)
+        self._last_tokens = res.input_tokens + res.output_tokens
         plan = res.value
         allowed = {(c.product_fqn, c.name) for c in candidates}
         unknown = []
@@ -131,10 +134,20 @@ class AnswerAgent:
         return round(coverage * min(1.0, 0.7 + retrieval), 4)
 
     # -- main entry ----------------------------------------------------------------------------
-    def ask(self, question: str, user_id: str, *, question_id: str | None = None, log: bool = True) -> Answer:
+    def ask(
+        self,
+        question: str,
+        user_id: str,
+        *,
+        question_id: str | None = None,
+        log: bool = True,
+        scope: list[str] | None = None,
+        snapshot: bool = True,
+    ) -> Answer:
         principal = load_principal(self.wh, user_id)
         qid = question_id or ids.new_id(self.wh, "question")
-        plan, retrieval, _ = self.plan(question)
+        self._last_tokens = 0
+        plan, retrieval, _ = self.plan(question, scope)
         conf = self.confidence(plan, retrieval)
         plan_json = plan.model_dump(mode="json")
         if not plan.product or not plan.metrics or plan.unmatched:
@@ -169,9 +182,44 @@ class AnswerAgent:
                 self._log(ans, existing=question_id is not None)
             return ans
         ans = self.execute(qid, question, principal, plan, sql, conf)
+        ans.tokens = self._last_tokens
         if log:
             self._log(ans, existing=question_id is not None)
+        if snapshot:
+            self.snapshot(ans, "answer")
         return ans
+
+    def run_plan(
+        self, plan: Plan, user_id: str, question: str, *, kind: str = "export", log: bool = True
+    ) -> Answer:
+        """Execute a saved plan (exports, saved questions) without the LLM; certified like any answer."""
+        principal = load_principal(self.wh, user_id)
+        qid = ids.new_id(self.wh, "question")
+        sql = compile_plan(self.semantic, plan)
+        ans = self.execute(qid, question, principal, plan, sql, 1.0)
+        if log:
+            self._log(ans, existing=False)
+        self.snapshot(ans, kind)
+        return ans
+
+    def snapshot(self, ans: Answer, kind: str) -> None:
+        """Answer log for recall: what was served, to whom, from which plan (docs/07 capability 1)."""
+        if ans.certificate is None or ans.withheld:
+            return
+        self.wh.execute(
+            "INSERT INTO meta.answer_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ans.certificate["cert_id"],
+                ans.question_id,
+                ans.asked_by,
+                ans.question,
+                kind,
+                dumps(ans.plan),
+                dumps(ans.rows),
+                ans.certificate["result_hash"],
+                clock.naive_utc(clock.now()),
+            ],
+        )
 
     def execute(
         self, qid: str, question: str, principal: Principal, plan: Plan, sql: str, conf: float

@@ -28,3 +28,30 @@ def mine_and_draft(app: Tessera) -> tuple[str, str]:
     cid = app.demand.draft_contract(intents[0])
     app.bus.drain()
     return intents[0], cid
+
+
+def build_exposure(app: Tessera) -> str:
+    _, cid = mine_and_draft(app)
+    app.approvals.approve_contract(cid, "raj")
+    app.bus.drain()
+    return cid
+
+
+def drift_and_approve(app: Tessera, approve: bool = True) -> str:
+    app.simulate_drift()
+    job = str(app.wh.rows("SELECT job_id FROM meta.patches")[0]["job_id"])
+    if approve:
+        app.approve_patch(job, "raj")
+    return job
+
+
+def fresh_app(template: Path, name: str) -> Tessera:
+    import shutil
+
+    from tessera import clock
+
+    path = Path(f"/tmp/tessera-tests/{name}.duckdb")
+    path.unlink(missing_ok=True)
+    shutil.copyfile(template, path)
+    clock.reset()
+    return Tessera(path)

@@ -49,3 +49,19 @@ def resume_after(latest: datetime | None) -> None:
     base = demo_now()
     if latest + timedelta(milliseconds=1) > base + _offset:
         _offset = latest - base + timedelta(milliseconds=1)
+
+
+class at:  # noqa: N801 - used as a context manager: `with clock.at(dt): ...`
+    """Temporarily pin the clock (used to seed history, e.g. an export served on 28 Sep)."""
+
+    def __init__(self, when: datetime) -> None:
+        self.when = when.replace(tzinfo=UTC) if when.tzinfo is None else when
+
+    def __enter__(self) -> None:
+        global _offset
+        self._saved = _offset
+        _offset = self.when - demo_now()
+
+    def __exit__(self, *exc: object) -> None:
+        global _offset
+        _offset = self._saved

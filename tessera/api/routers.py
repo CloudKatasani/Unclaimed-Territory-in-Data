@@ -419,3 +419,104 @@ def events(limit: int = 100) -> list[dict[str, Any]]:
 def demo_reset() -> dict[str, Any]:
     app = state.reset()
     return {"ok": True, "products": [p["fqn"] for p in app.publisher.products()]}
+
+
+# -- marketplace (docs/06) ---------------------------------------------------------------------------------
+@router.get("/market/listings")
+def market_listings(kind: str | None = None, q: str | None = None) -> list[dict[str, Any]]:
+    with state.platform() as app:
+        return [row(c) for c in app.market.listings(kind, q)]
+
+
+@router.get("/market/listings/{listing_id}")
+def market_listing(listing_id: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        try:
+            r = app.market.get(listing_id)
+        except KeyError as exc:
+            raise HTTPException(404, "listing not found") from exc
+        card = app.market.card(r)
+        history = []
+        if r["kind"] == "agent":
+            history = rows(
+                app.wh.rows(
+                    "SELECT evaluation_id, version, n, accuracy, avg_cost, p95_latency, evaluated_at, signature "
+                    "FROM meta.agent_evaluations WHERE agent = ? ORDER BY evaluated_at",
+                    [str(r["fqn"]).split(".", 1)[1]],
+                )
+            )
+        subscribed = app.wh.rows(
+            "SELECT bundle_id, status FROM meta.subscriptions WHERE listing_id = ? AND "
+            "principal = ? AND status <> 'revoked'",
+            [listing_id, user],
+        )
+        return {
+            **row(card),
+            "spec_yaml": r["spec_yaml"],
+            "history": history,
+            "subscription": rows(subscribed)[0] if subscribed else None,
+        }
+
+
+@router.post("/market/listings/{listing_id}/subscribe")
+def market_subscribe(listing_id: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        try:
+            return row(app.market.subscribe(listing_id, user))
+        except KeyError as exc:
+            raise HTTPException(404, "listing not found") from exc
+
+
+@router.post("/market/listings/{listing_id}/unsubscribe")
+def market_unsubscribe(listing_id: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        return {"revoked_leases": app.market.unsubscribe(listing_id, user)}
+
+
+@router.get("/market/ledger")
+def market_ledger(consumer: str | None = None) -> list[dict[str, Any]]:
+    with state.platform() as app:
+        return rows(app.market.ledger(consumer))
+
+
+@router.get("/access")
+def access(user: str = Depends(current_user)) -> list[dict[str, Any]]:
+    with state.platform() as app:
+        return [
+            {**b, "leases": rows(b["leases"]), "budget": row(b["budget"]) if b["budget"] else None}
+            for b in app.market.access(user)
+        ]
+
+
+# -- recall inbox (docs/07 capability 1) --------------------------------------------------------------------
+@router.get("/inbox")
+def inbox(user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        notices = rows(app.recall.inbox(user), ("delta_json",))
+        for n in notices:
+            snap = app.wh.rows(
+                "SELECT question, kind, served_at, plan_json, result_json FROM meta.answer_snapshots "
+                "WHERE cert_id = ?",
+                [n["cert_id"]],
+            )
+            n["original"] = row(snap[0], ("plan_json", "result_json")) if snap else None
+        return {"open": app.recall.open_count(user), "notices": notices}
+
+
+@router.post("/inbox/{notice_id}/ack")
+def inbox_ack(notice_id: str, user: str = Depends(current_user)) -> dict[str, Any]:
+    with state.platform() as app:
+        app.recall.acknowledge(notice_id, user)
+        return {"open": app.recall.open_count(user)}
+
+
+@router.get("/exports")
+def exports(user: str = Depends(current_user)) -> list[dict[str, Any]]:
+    with state.platform() as app:
+        rs = app.wh.rows(
+            "SELECT s.cert_id, s.question, s.kind, s.served_at, s.result_json, s.plan_json, "
+            "(SELECT count(*) FROM meta.recall_notices n WHERE n.cert_id = s.cert_id) AS restated "
+            "FROM meta.answer_snapshots s WHERE s.consumer = ? ORDER BY s.served_at DESC",
+            [user],
+        )
+        return rows(rs, ("result_json", "plan_json"))

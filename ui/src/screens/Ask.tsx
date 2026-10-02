@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api, useApi, useUser, type Json } from "../api";
 import { BarChart } from "../components/BarChart";
 import { Certificate } from "../components/Certificate";
@@ -7,6 +8,7 @@ import { DataTable, Pill, Section } from "../components/ui";
 export function Ask() {
   const { user } = useUser();
   const suggested = useApi<string[]>(["suggested"], "/suggested-questions");
+  const inbox = useApi<Json>(["inbox", user], `/inbox?user=${user}`);
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState<Json | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +31,11 @@ export function Ask() {
 
   return (
     <div className="space-y-4">
+      {(inbox.data?.open ?? 0) > 0 && (
+        <Link to={`/inbox?user=${user}`} className="block rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900" data-testid="recall-banner">
+          {inbox.data.open} of your past answers {inbox.data.open === 1 ? "was" : "were"} recalled — open your inbox to see what changed.
+        </Link>
+      )}
       <form
         className="card p-4"
         onSubmit={(e) => {

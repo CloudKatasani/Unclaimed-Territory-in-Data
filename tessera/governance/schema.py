@@ -94,6 +94,54 @@ META_DDL: dict[str, str] = {
         "call_id VARCHAR PRIMARY KEY, prompt_id VARCHAR, variables_hash VARCHAR, prompt_sha256 VARCHAR, "
         "model_name VARCHAR, input_tokens INTEGER, output_tokens INTEGER, source VARCHAR, created_at TIMESTAMP"
     ),
+    # --- M8+: marketplace, recall, evidence ---
+    "listings": (
+        "listing_id VARCHAR PRIMARY KEY, kind VARCHAR, fqn VARCHAR, version INTEGER, status VARCHAR, "
+        "spec_yaml VARCHAR, evidence_json VARCHAR, published_at TIMESTAMP"
+    ),
+    "subscriptions": (
+        "bundle_id VARCHAR PRIMARY KEY, listing_id VARCHAR, principal VARCHAR, status VARCHAR, missing_json VARCHAR, "
+        "created_at TIMESTAMP, revoked_at TIMESTAMP"
+    ),
+    "leases": (
+        "lease_id VARCHAR PRIMARY KEY, principal VARCHAR, fqn VARCHAR, purpose VARCHAR, scope_json VARCHAR, "
+        "expires_at TIMESTAMP, bundle_id VARCHAR, status VARCHAR, revoked_at TIMESTAMP"
+    ),
+    "budgets": (
+        "bundle_id VARCHAR PRIMARY KEY, principal VARCHAR, agent VARCHAR, max_credits_per_run DOUBLE, "
+        "max_runs_per_day INTEGER, credits_used DOUBLE, runs_used INTEGER, status VARCHAR"
+    ),
+    "sla_ledger": (
+        "entry_id VARCHAR PRIMARY KEY, fqn VARCHAR, consumer VARCHAR, breach_kind VARCHAR, evidence_cert_id VARCHAR, "
+        "credits DOUBLE, settled_at TIMESTAMP, dedupe_key VARCHAR"
+    ),
+    "answer_snapshots": (
+        "cert_id VARCHAR PRIMARY KEY, question_id VARCHAR, consumer VARCHAR, question VARCHAR, kind VARCHAR, "
+        "plan_json VARCHAR, result_json VARCHAR, result_hash VARCHAR, served_at TIMESTAMP"
+    ),
+    "recall_notices": (
+        "notice_id VARCHAR PRIMARY KEY, cert_id VARCHAR, consumer VARCHAR, old_hash VARCHAR, new_hash VARCHAR, "
+        "delta_json VARCHAR, reason VARCHAR, message VARCHAR, issued_at TIMESTAMP, acknowledged_at TIMESTAMP"
+    ),
+    "seed_info": "key VARCHAR PRIMARY KEY, value VARCHAR",
+    "consumer_settings": "consumer VARCHAR PRIMARY KEY, materiality_pct DOUBLE",
+    "benchmark_questions": (
+        "question_id VARCHAR PRIMARY KEY, asked_by VARCHAR, text VARCHAR, gold_plan VARCHAR, "
+        "ground_truth_hash VARCHAR, tags VARCHAR"
+    ),
+    "agent_evaluations": (
+        "evaluation_id VARCHAR PRIMARY KEY, agent VARCHAR, version INTEGER, n INTEGER, accuracy DOUBLE, "
+        "avg_cost DOUBLE, p95_latency DOUBLE, evaluated_at TIMESTAMP, details_json VARCHAR, signature VARCHAR"
+    ),
+    "agent_trials": (
+        "trial_id VARCHAR PRIMARY KEY, agent VARCHAR, incumbent_version INTEGER, candidate_version INTEGER, "
+        "days INTEGER, status VARCHAR, started_at TIMESTAMP, summary_json VARCHAR, decided_at TIMESTAMP"
+    ),
+    "agent_trial_results": (
+        "trial_id VARCHAR, question_id VARCHAR, question VARCHAR, incumbent_hash VARCHAR, candidate_hash VARCHAR, "
+        "divergence DOUBLE, incumbent_cost DOUBLE, candidate_cost DOUBLE, incumbent_outcome VARCHAR, "
+        "candidate_outcome VARCHAR"
+    ),
 }
 
 # Tables that hold seed configuration rather than runtime activity.

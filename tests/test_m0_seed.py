@@ -48,15 +48,20 @@ def test_meta_tables_exist_and_runtime_tables_empty(wh: DuckDBWarehouse) -> None
     tables = set(wh.list_tables("meta"))
     assert set(META_DDL) <= tables
     for runtime in (
-        "questions",
         "demand_intents",
-        "certificates",
         "build_jobs",
         "drift_events",
         "patches",
         "notifications",
         "events",
+        "recall_notices",
+        "subscriptions",
+        "leases",
+        "sla_ledger",
     ):
         assert wh.scalar(f"SELECT count(*) FROM meta.{runtime}") == 0, runtime
+    # the only questions/certificates are seeded history: two exports served before the demo starts
+    assert wh.scalar("SELECT count(*) FROM meta.questions WHERE asked_at >= TIMESTAMP '2026-10-02'") == 0
+    assert wh.scalar("SELECT count(*) FROM meta.answer_snapshots WHERE kind = 'export'") == 2
     assert wh.scalar("SELECT count(*) FROM meta.keys") == 1
     assert wh.scalar("SELECT count(*) FROM meta.contracts WHERE status = 'published'") == 2

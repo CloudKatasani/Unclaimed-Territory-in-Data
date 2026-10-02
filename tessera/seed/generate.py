@@ -6,6 +6,7 @@ python -m tessera.seed.generate [--db PATH]
 from __future__ import annotations
 
 import argparse
+import hashlib
 import shutil
 import time
 from datetime import datetime, timedelta
@@ -294,10 +295,20 @@ def seed(db_path: Path, settings: Settings | None = None, verbose: bool = False)
         ingestion.snapshot(wh)
         snapshot_lkg(wh, settings)
         wh.execute("CHECKPOINT")
-        if verbose:
-            print(f"seed complete in {time.time() - t0:.1f}s -> {db_path}")
     finally:
         wh.close()
+    from tessera.seed.history import seed_history
+
+    seed_history(db_path)
+    wh = DuckDBWarehouse(db_path)
+    try:
+        wh.execute("INSERT INTO meta.seed_info VALUES ('fingerprint', ?)", [seed_fingerprint(settings)])
+        wh.execute("CHECKPOINT")
+    finally:
+        wh.close()
+    clock.reset()
+    if verbose:
+        print(f"seed complete in {time.time() - t0:.1f}s -> {db_path}")
 
 
 def snapshot_lkg(wh: Warehouse, settings: Settings | None = None) -> None:
@@ -313,10 +324,42 @@ def snapshot_lkg(wh: Warehouse, settings: Settings | None = None) -> None:
     )
 
 
+def seed_fingerprint(settings: Settings | None = None) -> str:
+    """Hash of everything that shapes the seeded warehouse; a stale template is regenerated."""
+    settings = settings or get_settings()
+    root = Path(__file__).resolve().parents[1]
+    files = sorted(
+        [
+            *root.joinpath("seed").rglob("*.py"),
+            *root.joinpath("seed").rglob("*.yaml"),
+            *root.joinpath("seed").rglob("*.csv"),
+            root / "governance" / "schema.py",
+        ]
+    )
+    h = hashlib.sha256(f"{settings.read_interval_min}|{settings.demo_now}|{settings.key_seed}".encode())
+    for f in files:
+        h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def template_fingerprint(path: Path) -> str | None:
+    import duckdb
+
+    try:
+        con = duckdb.connect(str(path), read_only=True)
+        try:
+            row = con.execute("SELECT value FROM meta.seed_info WHERE key = 'fingerprint'").fetchone()
+        finally:
+            con.close()
+    except Exception:  # noqa: BLE001 - any failure means the template must be rebuilt
+        return None
+    return str(row[0]) if row else None
+
+
 def ensure_template(settings: Settings | None = None, force: bool = False) -> Path:
     settings = settings or get_settings()
     tpl = settings.seed_template
-    if force or not tpl.exists():
+    if force or not tpl.exists() or template_fingerprint(tpl) != seed_fingerprint(settings):
         seed(tpl, settings)
     return tpl
 

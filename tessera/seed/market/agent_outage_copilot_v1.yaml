@@ -1,0 +1,30 @@
+# Agent product contract, version 1 (the incumbent in the agent store)
+agent: outage_copilot
+version: 1
+title: Outage Copilot
+purpose: Answer outage, reliability and restoration questions for regional managers
+owner: raj
+inputs: [natural_language_question, user_principal]
+outputs: [answer_table, certificate]
+
+requires:
+  data_products:
+    - dp.outage_reliability
+  policies: [row_filter.region]
+  purpose: operational_reporting
+
+budget:
+  max_credits_per_run: 0.05
+  max_runs_per_day: 500
+
+evaluation:
+  replay_set: ground_truth
+  min_verified_accuracy: 0.95
+  trial_days: 3
+  promotion_gate:
+    max_divergence: 0.01
+    max_cost_increase_pct: 10
+
+provenance:
+  prompts: [answer.plan]
+  model: mock          # live mode: claude-sonnet-5-5

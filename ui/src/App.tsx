@@ -6,9 +6,16 @@ import { Builds } from "./screens/Builds";
 import { Demand } from "./screens/Demand";
 import { Drift } from "./screens/Drift";
 import { Lineage } from "./screens/Lineage";
+import { Access } from "./screens/Access";
+import { Inbox } from "./screens/Inbox";
+import { Market } from "./screens/Market";
 
 const NAV = [
+  { to: "/market", label: "Marketplace" },
   { to: "/", label: "Ask" },
+  { to: "/agents", label: "Agent store" },
+  { to: "/access", label: "Access" },
+  { to: "/inbox", label: "Inbox" },
   { to: "/demand", label: "Demand board" },
   { to: "/builds", label: "Builds" },
   { to: "/drift", label: "Drift" },
@@ -87,6 +94,10 @@ export default function App() {
               <Route path="/builds" element={<Builds />} />
               <Route path="/drift" element={<Drift />} />
               <Route path="/lineage" element={<Lineage />} />
+              <Route path="/market" element={<Market />} />
+              <Route path="/agents" element={<Market only="agent" />} />
+              <Route path="/access" element={<Access />} />
+              <Route path="/inbox" element={<Inbox />} />
             </Routes>
           </main>
         </div>

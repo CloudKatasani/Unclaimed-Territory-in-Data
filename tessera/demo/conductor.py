@@ -33,9 +33,13 @@ def record_fixtures() -> dict[str, Any]:
         finally:
             rec.close()
     files = sorted({f"{c['prompt_id']}/{c['variables_hash']}.json" for c in calls})
+    stale = sorted(existing - set(files))
+    for rel in stale:  # fixtures the demo no longer reaches
+        (FIXTURES / rel).unlink()
     return {
         "storyline": result,
         "fixtures": files,
         "new": sorted(set(files) - existing),
+        "removed": stale,
         "total_files": len(existing | set(files)),
     }
