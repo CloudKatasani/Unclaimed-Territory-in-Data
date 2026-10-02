@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { api, useApi, useUser, type Json } from "../api";
 import { BarChart } from "../components/BarChart";
 import { Certificate } from "../components/Certificate";
-import { DataTable, Pill, Section } from "../components/ui";
+import { Narrative } from "../components/Narrative";
+import { DataTable, Pill, Section, Verdict } from "../components/ui";
 
 export function Ask() {
   const { user } = useUser();
@@ -93,12 +94,34 @@ export function Ask() {
                 </span>
               }
             >
+              {answer.decision && (
+                <div className="mb-4 rounded-md border border-indigo-200 bg-accent-soft p-3" data-testid="decision">
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold">Decision pack: {answer.decision.title}</div>
+                    {answer.decision.pack_verdict && <span className="flex items-center gap-1 text-xs text-slate-500">pack certificate <Verdict verdict={answer.decision.pack_verdict} /></span>}
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {answer.decision.thresholds.map((t: Json) => (
+                      <div key={t.metric} className="rounded border border-slate-200 bg-white p-2 text-sm">
+                        <div className="text-xs text-slate-500">{t.meaning}</div>
+                        <div className="text-lg font-semibold tabular-nums">
+                          {t.current.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-slate-500">{t.unit} · {t.scope} {t.scope_value}</span>
+                        </div>
+                        <div className={t.breached ? "text-rose-700" : "text-emerald-700"}>
+                          {t.breached ? "Threshold breached" : `Margin ${t.margin.toLocaleString(undefined, { maximumFractionDigits: 1 })} before ${t.comparator} ${t.threshold}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {answer.withheld ? (
                 <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{answer.message}</div>
               ) : (
                 <div className="space-y-4">
                   {chartable && <BarChart rows={answer.rows} dim={answer.plan.dimensions[0]} measure={answer.plan.metrics[0]} />}
                   <DataTable columns={answer.columns} rows={answer.rows} />
+                  <Narrative sentences={answer.narrative} verdict={answer.certificate?.verdict} />
                 </div>
               )}
             </Section>

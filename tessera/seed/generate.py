@@ -106,8 +106,12 @@ def _gen_outages(wh: Warehouse, rng: np.random.Generator, start: datetime, end: 
     events: list[tuple[str, datetime, datetime, str]] = [
         (str(so["feeder_id"]), s_start, s_end, str(so["cause_code"]))
     ]
+    for f, a, b in D.SCRIPTED_STORM:
+        st, en = datetime.fromisoformat(a), datetime.fromisoformat(b)
+        taken[f].append((st - timedelta(hours=6), en + timedelta(hours=6)))
+        events.append((f, st, en, "WEATHER"))
     slots = int((end - start - timedelta(hours=10)).total_seconds() // 900)
-    while len(events) < D.N_RANDOM_OUTAGES + 1:
+    while len(events) < D.N_OUTAGES:
         f = feeders[int(rng.integers(0, len(feeders)))]
         st = start + timedelta(minutes=15 * int(rng.integers(0, slots)))
         dur = int(np.clip(round(float(rng.lognormal(np.log(45), 0.75)) / 15) * 15, 15, 480))

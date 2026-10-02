@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 REGIONS = ["NORTH", "CENTRAL", "SOUTH"]
+N_OUTAGES = 400
 SUBSTATIONS_PER_REGION = 4
 FEEDERS_PER_SUBSTATION = 5
 N_METERS = 5000
 N_DAYS = 90
-N_RANDOM_OUTAGES = 399  # plus the scripted S-04 outage = 400
 
 USERS: list[dict[str, Any]] = [
     {"user_id": "alice", "display_name": "Alice", "role": "ops_manager", "region": "NORTH"},
@@ -172,6 +172,16 @@ CRITICALITY = [
     ("dp.outage_reliability", 4, "SAIDI/SAIFI are reported to the regulator"),
     ("dp.meter_consumption_daily", 3, "Feeds billing reconciliation"),
     ("raw.ami_interval_reads", 3, "Conformed AMI reads"),
+]
+
+# Last night's storm across S-04 feeders (1-2 Oct): NORTH's month-to-date SAIDI sits just under its
+# 120-minute target, which is what the decision-first answer in the client demo reasons about.
+SCRIPTED_STORM = [
+    ("F-016", "2026-10-01 20:00:00", "2026-10-02 02:00:00"),
+    ("F-017", "2026-10-01 21:00:00", "2026-10-02 03:30:00"),
+    ("F-018", "2026-10-01 20:30:00", "2026-10-02 02:30:00"),
+    ("F-019", "2026-10-01 22:00:00", "2026-10-02 05:00:00"),
+    ("F-020", "2026-10-01 23:00:00", "2026-10-02 04:00:00"),
 ]
 
 ROW_FILTER_EXPR = "region = :user.region"

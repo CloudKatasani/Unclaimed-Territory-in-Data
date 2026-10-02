@@ -1,0 +1,16 @@
+{
+  "sentences": [
+    {
+      "query_ref": "main",
+      "sentence": "Substation S-04 had the highest SAIDI last month at 125.5 minutes."
+    },
+    {
+      "query_ref": "total",
+      "sentence": "Across all 4 substations in scope, SAIDI was 89.5 minutes."
+    },
+    {
+      "query_ref": "previous_period",
+      "sentence": "S-04 was at 134.6 minutes the period before, so it is down 9.1 minutes."
+    }
+  ]
+}

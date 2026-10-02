@@ -7,8 +7,10 @@ from pathlib import Path
 from tessera import clock
 from tessera.agents.answer import AnswerAgent
 from tessera.agents.certificate import CertificateService
+from tessera.agents.decision import DecisionEvaluator
 from tessera.agents.demand_miner import DemandMiner
 from tessera.agents.drift_healer import DriftHealer
+from tessera.agents.narrative import NarrativeWriter
 from tessera.agents.pipeline_builder import PipelineBuilder
 from tessera.agents.recall import RecallJob
 from tessera.config import Settings, get_settings
@@ -56,6 +58,11 @@ class Tessera:
         self.healer.sentinel_check = self.sentinels.check_shadow
         self.answer.sentinels = self.sentinels
         self.load_sentinel_keys()
+        self.decisions = DecisionEvaluator(self.wh, self.llm, self.semantic)
+        self.market.decisions = self.decisions
+        self.answer.decisions = self.decisions
+        self.answer.narrator = NarrativeWriter(self.wh, self.llm)
+        self.answer.pack_verdict = lambda pack: self.market.pack_evidence(pack)["verdict"]
         self.resume_clock()
         self._wire()
 

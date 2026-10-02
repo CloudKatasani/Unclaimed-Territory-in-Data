@@ -1,0 +1,12 @@
+{
+  "sentences": [
+    {
+      "query_ref": "main",
+      "sentence": "Feeder F-009 had the highest SAIFI over the last three months at 16.0."
+    },
+    {
+      "query_ref": "total",
+      "sentence": "Across all 20 feeders in scope, SAIFI was 6.3."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "sentences": [
+    {
+      "query_ref": "main",
+      "sentence": "meters with zero usage last month was 3,414."
+    },
+    {
+      "query_ref": "previous_period",
+      "sentence": "The period before, it was 3,499."
+    }
+  ]
+}

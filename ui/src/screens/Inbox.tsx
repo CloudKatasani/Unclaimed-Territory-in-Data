@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, fmt, useAction, useApi, useUser, type Json } from "../api";
+import { Narrative } from "../components/Narrative";
 import { DataTable, Empty, Pill, Section } from "../components/ui";
 
 export function Inbox() {
@@ -51,7 +52,10 @@ export function Inbox() {
             {(exports.data ?? []).map((e) => (
               <tr key={e.cert_id}>
                 <td>{e.served_at.slice(0, 16).replace("T", " ")}</td>
-                <td>{e.question}</td>
+                <td>
+                  {e.question}
+                  {e.narrative?.length > 0 && <div className="mt-1"><Narrative sentences={e.narrative} /></div>}
+                </td>
                 <td>{e.kind}</td>
                 <td>{e.restated ? <span className="font-semibold text-amber-700">Restated</span> : "current"}</td>
               </tr>

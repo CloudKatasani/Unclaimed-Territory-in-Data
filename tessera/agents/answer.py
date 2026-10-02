@@ -61,6 +61,8 @@ class Answer:
     unmatched: list[str] = field(default_factory=list)
     withheld: bool = False
     tokens: int = 0
+    narrative: list[dict[str, Any]] = field(default_factory=list)
+    decision: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -102,6 +104,9 @@ class AnswerAgent:
         self.settings = settings
         self.sentinel_keys: dict[str, str] = {}
         self.sentinels: Any = None
+        self.narrator: Any = None  # NarrativeWriter (M10)
+        self.decisions: Any = None  # DecisionEvaluator (M10)
+        self.pack_verdict: Any = None  # callable(pack_spec) -> aggregated certificate verdict
         self._last_tokens = 0
 
     # -- planning ------------------------------------------------------------------------------
@@ -150,6 +155,10 @@ class AnswerAgent:
         principal = load_principal(self.wh, user_id)
         qid = question_id or ids.new_id(self.wh, "question")
         self._last_tokens = 0
+        if self.decisions is not None:
+            match, pack = self.decisions.match(question)
+            if pack is not None:
+                return self.decide(qid, question, principal, match.scope, pack, log=log)
         plan, retrieval, _ = self.plan(question, scope)
         conf = self.confidence(plan, retrieval)
         plan_json = plan.model_dump(mode="json")
@@ -186,10 +195,146 @@ class AnswerAgent:
             return ans
         ans = self.execute(qid, question, principal, plan, sql, conf)
         ans.tokens = self._last_tokens
+        if self.narrator is not None and ans.certificate and not ans.withheld:
+            sentences, bound = self.narrator.write(
+                question, plan, ans.rows, lambda p: self.run_sub(p, principal)
+            )
+            ans.narrative = self.narrator.bind(ans.certificate["cert_id"], user_id, sentences, bound)
         if log:
             self._log(ans, existing=question_id is not None)
         if snapshot:
             self.snapshot(ans, "answer")
+        return ans
+
+    def run_sub(self, plan: Plan, principal: Principal) -> list[dict[str, Any]]:
+        """Execute a drill-down sub-query under the same policies (no certificate of its own)."""
+        try:
+            sql = compile_plan(self.semantic, plan)
+        except CompileError:
+            return []
+        rewritten, _ = self.policy.rewrite(sql, principal, sentinel_keys=self.sentinel_keys)
+        return serialise(self.wh.rows(rewritten))
+
+    def decide(
+        self,
+        qid: str,
+        question: str,
+        principal: Principal,
+        scope: dict[str, str],
+        pack: dict[str, Any],
+        *,
+        log: bool = True,
+    ) -> Answer:
+        """Decision-first answer: thresholds, margins and sensitivity, under one certificate."""
+        decisions: list[Any] = []
+
+        def rewrite(sql: str) -> str:
+            out, dec = self.policy.rewrite(sql, principal, sentinel_keys=self.sentinel_keys)
+            for d in dec:
+                if d.as_dict() not in [x.as_dict() for x in decisions]:
+                    decisions.append(d)
+            return str(out)
+
+        thresholds = self.decisions.evaluate(pack, scope, principal, rewrite=rewrite)
+        rows = [
+            {
+                "threshold": t["meaning"],
+                "scope": f"{t['scope']} {t['scope_value'] or 'all'}",
+                "current": round(t["current"], 2),
+                "limit": f"{t['comparator']} {t['threshold']:g}",
+                "margin": round(t["margin"], 2),
+                "status": "breached" if t["breached"] else "within",
+            }
+            for t in thresholds
+        ]
+        metrics: list[dict[str, Any]] = []
+        products: list[str] = []
+        cols: set[str] = set()
+        for t in thresholds:
+            el = self.semantic.get(t["product"], t["measure"])
+            if el is None:
+                continue
+            if t["product"] not in products:
+                products.append(t["product"])
+            if el.name not in [m["name"] for m in metrics]:
+                metrics.append(
+                    {
+                        "name": el.name,
+                        "certified": el.certified,
+                        "certified_by": el.certified_by,
+                        "expression": el.expression,
+                        "product": t["product"],
+                    }
+                )
+            cols |= {c.name for c in sqlglot.parse_one(el.expression, dialect="duckdb").find_all(exp.Column)}
+            cols |= {"region", "substation_id", "month"}
+        nodes = sorted({n for p in products for n in self.lineage.upstream_columns(p, sorted(cols))})
+        cert = self.certs.issue(
+            question_id=qid,
+            asked_by=principal.user_id,
+            metrics=metrics,
+            products=products,
+            policy_decisions=[d.as_dict() for d in decisions],
+            lineage_nodes=nodes,
+            result_hash=result_hash(rows),
+            sentinel_status=self._sentinel_status(nodes),
+        )
+        sens = [t for t in thresholds if t["sensitivity"]]
+        narrative = [
+            {
+                "sentence": t["sensitivity"],
+                "query_ref": f"threshold:{t['metric']}",
+                "sentence_no": i,
+                "status": "current",
+            }
+            for i, t in enumerate(sens, start=1)
+        ]
+        for n in narrative:
+            self.wh.execute(
+                "INSERT INTO meta.narrative_bindings VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'current', NULL, NULL)",
+                [
+                    cert["cert_id"],
+                    n["sentence_no"],
+                    n["sentence"],
+                    n["query_ref"],
+                    dumps({"decision": pack["decision"], "scope": scope}),
+                    cert["result_hash"],
+                    principal.user_id,
+                    clock.naive_utc(clock.now()),
+                ],
+            )
+        verdict = self.pack_verdict(pack) if self.pack_verdict else None
+        withheld = cert["verdict"] == "block"
+        ans = Answer(
+            qid,
+            question,
+            principal.user_id,
+            "answered",
+            1.0,
+            {
+                "decision": pack["decision"],
+                "scope": scope,
+                "product": products[0] if products else None,
+                "metrics": [m["name"] for m in metrics],
+                "dimensions": [],
+            },
+            "\n".join(t["sql"] for t in thresholds),
+            list(rows[0].keys()) if rows else [],
+            [] if withheld else rows,
+            cert,
+            "",
+            withheld=withheld,
+            narrative=[] if withheld else narrative,
+            decision={
+                "decision": pack["decision"],
+                "title": pack.get("title"),
+                "scope": scope,
+                "thresholds": thresholds,
+                "pack_verdict": verdict,
+            },
+        )
+        if log:
+            self._log(ans, existing=False)
         return ans
 
     def run_plan(

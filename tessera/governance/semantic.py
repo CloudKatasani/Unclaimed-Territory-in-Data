@@ -17,8 +17,22 @@ from tessera.warehouse.base import Warehouse
 
 TIME_GRAINS = {"month", "day", "timestamp"}
 TimeWindow = Literal[
-    "last_month", "last_3_months", "this_month", "last_week", "last_7_days", "yesterday", "all"
+    "last_month",
+    "last_3_months",
+    "this_month",
+    "last_week",
+    "last_7_days",
+    "yesterday",
+    "all",
+    "month_before_last",
+    "week_before_last",
 ]
+# The period immediately before a relative window (used for narrative drill-downs).
+PREVIOUS_WINDOW = {
+    "last_month": "month_before_last",
+    "this_month": "last_month",
+    "last_week": "week_before_last",
+}
 
 
 @dataclass(frozen=True)
@@ -198,6 +212,10 @@ def resolve_window(window: str | None, now: datetime | None = None) -> tuple[dat
     end: date
     if window == "last_month":
         start, end = _month_start(today, 1), _month_start(today)
+    elif window == "month_before_last":
+        start, end = _month_start(today, 2), _month_start(today, 1)
+    elif window == "week_before_last":
+        start, end = today - timedelta(days=14), today - timedelta(days=7)
     elif window == "last_3_months":
         start, end = _month_start(today, 3), _month_start(today)
     elif window == "this_month":

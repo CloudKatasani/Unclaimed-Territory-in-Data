@@ -1,0 +1,12 @@
+{
+  "sentences": [
+    {
+      "query_ref": "main",
+      "sentence": "2026-09-27 had the highest daily kwh last week at 3,324 kWh."
+    },
+    {
+      "query_ref": "total",
+      "sentence": "Across all 7 periods in scope, daily kwh was 22,615 kWh."
+    }
+  ]
+}

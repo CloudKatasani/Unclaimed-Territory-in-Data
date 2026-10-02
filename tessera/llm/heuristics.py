@@ -245,3 +245,109 @@ def drift_patch(v: dict[str, Any]) -> dict[str, Any]:
             }
         ]
     }
+
+
+@responder("decision.match")
+def decision_match(v: dict[str, Any]) -> dict[str, Any]:
+    from tessera.agents.decision import extract_scope
+
+    packs = sorted(v["packs"], key=lambda p: -float(p.get("similarity", 0)))
+    if not packs:
+        return {"decision": None, "scope": {}, "confidence": 0.0}
+    return {
+        "decision": packs[0]["decision"],
+        "scope": extract_scope(str(v["question"])),
+        "confidence": round(min(1.0, 0.5 + float(packs[0]["similarity"])), 4),
+    }
+
+
+UNITS = {"saidi": " minutes", "caidi": " minutes", "daily_kwh": " kWh", "kwh_during_outage": " kWh"}
+PERIODS = {
+    "last_month": "last month",
+    "this_month": "this month",
+    "last_week": "last week",
+    "last_3_months": "over the last three months",
+    "last_7_days": "over the last 7 days",
+    "yesterday": "yesterday",
+    "month_before_last": "the month before",
+    "week_before_last": "the week before",
+}
+DIM_WORDS = {
+    "substation_id": "Substation",
+    "feeder_id": "Feeder",
+    "region": "Region",
+    "meter_id": "Meter",
+    "read_date": "",
+    "month": "",
+}
+
+
+def _metric_label(m: str) -> str:
+    return m.upper() if len(m) <= 5 else m.replace("_", " ")
+
+
+def _fmt(v: float) -> str:
+    return f"{v:,.1f}" if abs(v) < 1000 else f"{v:,.0f}"
+
+
+@responder("narrative.write")
+def narrative_write(v: dict[str, Any]) -> dict[str, Any]:
+    plan = v["plan"]
+    results = v["results"]
+    if not plan.get("metrics"):
+        return {"sentences": []}
+    metric = plan["metrics"][0]
+    label, unit = _metric_label(metric), UNITS.get(metric, "")
+    period = PERIODS.get(str(plan.get("time_window")), "")
+    main = [r for r in results.get("main", []) if isinstance(r.get(metric), int | float)]
+    sentences: list[dict[str, Any]] = []
+    dims = plan.get("dimensions", [])
+    if main and dims:
+        dim = dims[0]
+        top = max(main, key=lambda r: r[metric])
+        word = DIM_WORDS.get(dim, dim.replace("_", " ").title())
+        who = f"{word} {top[dim]}".strip()
+        sentences.append(
+            {
+                "sentence": f"{who} had the highest {label} {period} at {_fmt(top[metric])}{unit}.".replace(
+                    "  ", " "
+                ),
+                "query_ref": "main",
+            }
+        )
+        total = results.get("total") or []
+        if total and isinstance(total[0].get(metric), int | float):
+            sentences.append(
+                {
+                    "sentence": f"Across all {len(main)} {word.lower() or 'period'}s in scope, {label} was "
+                    f"{_fmt(total[0][metric])}{unit}.",
+                    "query_ref": "total",
+                }
+            )
+        prev = {r.get(dim): r for r in results.get("previous_period") or []}
+        if top[dim] in prev and isinstance(prev[top[dim]].get(metric), int | float):
+            before = prev[top[dim]][metric]
+            change = "up" if top[metric] >= before else "down"
+            sentences.append(
+                {
+                    "sentence": f"{top[dim]} was at {_fmt(before)}{unit} the period before, so it is {change} "
+                    f"{abs(top[metric] - before):,.1f}{unit}.",
+                    "query_ref": "previous_period",
+                }
+            )
+    elif main:
+        sentences.append(
+            {
+                "sentence": f"{label} {period} was {_fmt(main[0][metric])}{unit}.".replace("  ", " "),
+                "query_ref": "main",
+            }
+        )
+        prev_rows = results.get("previous_period") or []
+        if prev_rows and isinstance(prev_rows[0].get(metric), int | float):
+            sentences.append(
+                {
+                    "sentence": f"The period before, it was {_fmt(prev_rows[0][metric])}{unit}.",
+                    "query_ref": "previous_period",
+                }
+            )
+    return {"sentences": sentences}

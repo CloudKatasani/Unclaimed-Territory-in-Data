@@ -150,9 +150,49 @@ class RecallJob:
             )
             notify(self.wh, str(snap["consumer"]), "recall", message, nid)
             issued.append(nid)
+        self.recall_sentences(fqn)
         record_metric(self.wh, "recall.checked", checked, {"fqn": fqn})
         record_metric(self.wh, "recall.notices", len(issued), {"fqn": fqn})
         return issued
+
+    def recall_sentences(self, fqn: str) -> int:
+        """Narrative sentences are recalled individually: re-run each bound sub-query on the product."""
+        n = 0
+        for b in self.wh.rows(
+            "SELECT * FROM meta.narrative_bindings WHERE status = 'current' ORDER BY cert_id, sentence_no"
+        ):
+            plan_data = loads(b["plan_json"]) or {}
+            if plan_data.get("product") != fqn:
+                continue
+            plan = Plan.model_validate(plan_data)
+            snap = {"plan_json": b["plan_json"], "served_at": b["served_at"], "consumer": b["consumer"]}
+            rows = self.reexecute(snap)
+            if result_hash(rows) == b["result_hash"]:
+                continue
+            old = [r for r in self._bound_rows(b, plan)]
+            d = (
+                diff_results(old, rows, plan.dimensions, plan.metrics)
+                if old
+                else {"cells": [], "max_pct": 100.0}
+            )
+            if old and float(str(d["max_pct"])) <= self.materiality(str(b["consumer"])):
+                continue
+            self.wh.execute(
+                "UPDATE meta.narrative_bindings SET status = 'restated', restated_at = ?, "
+                "restated_detail = ? WHERE cert_id = ? AND sentence_no = ?",
+                [clock.naive_utc(clock.now()), dumps(d), b["cert_id"], b["sentence_no"]],
+            )
+            n += 1
+        return n
+
+    def _bound_rows(self, b: dict[str, Any], plan: Plan) -> list[dict[str, Any]]:
+        """Rows the sentence was bound to: for the main query they are in the answer snapshot."""
+        if b["query_ref"] == "main":
+            r = self.wh.rows(
+                "SELECT result_json FROM meta.answer_snapshots WHERE cert_id = ?", [b["cert_id"]]
+            )
+            return list(loads(r[0]["result_json"]) or []) if r else []
+        return []
 
     def message(self, snap: dict[str, Any], d: dict[str, Any], reason: str) -> str:
         served = snap["served_at"]

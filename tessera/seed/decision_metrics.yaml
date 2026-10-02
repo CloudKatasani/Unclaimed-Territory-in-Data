@@ -1,0 +1,27 @@
+# How decision-pack threshold metrics and their drivers map onto the semantic model (sector-specific).
+metrics:
+  saidi_minutes_mtd: {product: dp.outage_reliability, measure: saidi, time_window: this_month, unit: minutes}
+  customers_out: {product: dp.outage_reliability, measure: customers_interrupted, time_window: this_month, unit: customers}
+scopes:
+  region: {dimension: region}
+  substation: {dimension: substation_id}
+  feeder: {dimension: feeder_id}
+# A driver adds synthetic rows to the product (counterfactual) — one unit per increment.
+# Expressions may use `avg_feeder_customers` (average customers served per feeder in scope this month).
+drivers:
+  outage_count_over_4h:
+    unit_row:
+      outage_count: "1"
+      outage_count_over_4h: "1"
+      customer_interruptions: "avg_feeder_customers"
+      customer_minutes_interrupted: "avg_feeder_customers * 241"
+      customers_served: "0"
+  customers_affected:
+    unit_row:
+      outage_count: "0"
+      customer_interruptions: "1"
+      customer_minutes_interrupted: "0"
+      customers_served: "0"
+# Phrases that signal a decision rather than a lookup.
+decision_cues: [should i, should we, do i need, do we need, request mutual aid, mutual aid, get crews, send crews,
+                escalate, crews first]

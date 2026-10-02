@@ -519,7 +519,12 @@ def exports(user: str = Depends(current_user)) -> list[dict[str, Any]]:
             "FROM meta.answer_snapshots s WHERE s.consumer = ? ORDER BY s.served_at DESC",
             [user],
         )
-        return rows(rs, ("result_json", "plan_json"))
+        out = rows(rs, ("result_json", "plan_json"))
+        for e in out:
+            e["narrative"] = rows(
+                app.answer.narrator.for_cert(str(e["cert_id"])), ("plan_json", "restated_detail")
+            )
+        return out
 
 
 @router.post("/market/agents/{agent}/trials")
@@ -556,3 +561,9 @@ def sentinels() -> dict[str, Any]:
 def sentinels_verify() -> dict[str, Any]:
     with state.platform() as app:
         return app.sentinels.verify_all()
+
+
+@router.get("/certs/{cert_id}/narrative")
+def cert_narrative(cert_id: str) -> list[dict[str, Any]]:
+    with state.platform() as app:
+        return rows(app.answer.narrator.for_cert(cert_id), ("plan_json", "restated_detail"))

@@ -132,6 +132,11 @@ META_DDL: dict[str, str] = {
         "result_id VARCHAR PRIMARY KEY, fqn VARCHAR, context VARCHAR, passed BOOLEAN, checked INTEGER, "
         "mismatches_json VARCHAR, checked_at TIMESTAMP"
     ),
+    "narrative_bindings": (
+        "cert_id VARCHAR, sentence_no INTEGER, sentence VARCHAR, query_ref VARCHAR, plan_json VARCHAR, "
+        "result_hash VARCHAR, consumer VARCHAR, served_at TIMESTAMP, status VARCHAR, restated_at TIMESTAMP, "
+        "restated_detail VARCHAR"
+    ),
     "seed_info": "key VARCHAR PRIMARY KEY, value VARCHAR",
     "consumer_settings": "consumer VARCHAR PRIMARY KEY, materiality_pct DOUBLE",
     "benchmark_questions": (
