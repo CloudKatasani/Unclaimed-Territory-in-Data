@@ -47,3 +47,17 @@ def wh(template: Path, request: pytest.FixtureRequest) -> Iterator[DuckDBWarehou
     yield w
     w.close()
     path.unlink(missing_ok=True)
+
+
+@pytest.fixture()
+def app(template: Path, request: pytest.FixtureRequest) -> Iterator[Tessera]:
+    from tessera.platform import Tessera
+
+    path = _copy(template, f"app-{request.node.name}"[:80])
+    t = Tessera(path)
+    yield t
+    t.close()
+    path.unlink(missing_ok=True)
+
+
+from tessera.platform import Tessera  # noqa: E402,F401

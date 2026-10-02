@@ -66,7 +66,11 @@ class ProvenanceLedger:
         self.signer = Signer(wh)
 
     def head(self, target_fqn: str, kind: str | None = None) -> dict[str, Any] | None:
-        sql = "SELECT * FROM meta.provenance WHERE target_fqn = ?"
+        """Latest artifact for a target: the chain tip (not referenced as anyone's predecessor)."""
+        sql = (
+            "SELECT * FROM meta.provenance p WHERE target_fqn = ? AND NOT EXISTS "
+            "(SELECT 1 FROM meta.provenance n WHERE n.prev_artifact_id = p.artifact_id)"
+        )
         params: list[Any] = [target_fqn]
         if kind:
             sql += " AND artifact_kind = ?"
@@ -89,7 +93,10 @@ class ProvenanceLedger:
             "tests_run": a.tests_run,
             "gate_evidence": a.gate_evidence,
             "approved_by": a.approved_by,
-            "created_at": clock.naive_utc(clock.now()),
+            "created_at": max(
+                clock.naive_utc(clock.now()),
+                prev["created_at"] + timedelta(milliseconds=1) if prev else clock.naive_utc(clock.now()),
+            ),
             "prev_artifact_id": prev["artifact_id"] if prev else None,
         }
         clock.advance(timedelta(milliseconds=1))  # keep strict ordering

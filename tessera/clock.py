@@ -38,3 +38,14 @@ def naive_utc(dt: datetime) -> datetime:
 
 def iso(dt: datetime) -> str:
     return naive_utc(dt).isoformat(timespec="seconds") + "Z"
+
+
+def resume_after(latest: datetime | None) -> None:
+    """Frozen-clock processes resume after the latest stored event so ordering is preserved."""
+    global _offset
+    if latest is None:
+        return
+    latest = latest.replace(tzinfo=UTC) if latest.tzinfo is None else latest
+    base = demo_now()
+    if latest + timedelta(milliseconds=1) > base + _offset:
+        _offset = latest - base + timedelta(milliseconds=1)

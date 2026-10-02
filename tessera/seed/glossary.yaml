@@ -6,7 +6,7 @@ concepts:
     label: zero usage
     specificity: 2
     derived_from: consumption
-    phrases: [zero usage, no consumption, zero kwh, read zero, reported zero, reporting nothing,
+    phrases: [zero usage, no consumption, zero kwh, reporting nothing,
               no usage, dead meters, zero consumption]
   outage:
     label: outages
