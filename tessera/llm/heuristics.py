@@ -217,3 +217,21 @@ def build_repair(v: dict[str, Any]) -> dict[str, Any]:
     if _contract_product(v) != "dp.meter_outage_exposure":
         raise ValueError("mock mode has no repair template for this contract; use LLM_MODE=live")
     return {"sql": f"CREATE TABLE {v['target']} AS\n{EXPOSURE_GOOD}"}
+
+
+@responder("drift.patch")
+def drift_patch(v: dict[str, Any]) -> dict[str, Any]:
+    rename = next((c for c in v["changes"] if c["kind"] == "rename"), None)
+    if rename is None:
+        return {"candidates": []}
+    new = rename["new_column"]
+    # A plausible-looking but lossy fix: the demo needs the gate to reject it visibly.
+    return {
+        "candidates": [
+            {
+                "label": "cast to INTEGER (kWh as whole units)",
+                "expression": f"CAST({new} AS INTEGER)",
+                "rationale": "vendor now sends the reading as text; parse it as a whole number of kWh",
+            }
+        ]
+    }

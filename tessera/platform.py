@@ -8,6 +8,7 @@ from tessera import clock
 from tessera.agents.answer import AnswerAgent
 from tessera.agents.certificate import CertificateService
 from tessera.agents.demand_miner import DemandMiner
+from tessera.agents.drift_healer import DriftHealer
 from tessera.agents.pipeline_builder import PipelineBuilder
 from tessera.config import Settings, get_settings
 from tessera.governance.catalog import Catalog
@@ -43,6 +44,7 @@ class Tessera:
         self.approvals = Approvals(self.wh, self.bus)
         self.builder = PipelineBuilder(self.wh, self.llm, self.policy, self.ledger, self.bus, self.settings)
         self.publisher = Publisher(self.wh, self.lineage, self.ledger, self.semantic, self.bus)
+        self.healer = DriftHealer(self.wh, self.llm, self.lineage, self.bus, self.settings)
         self.resume_clock()
         self._wire()
 
@@ -59,6 +61,30 @@ class Tessera:
         self.bus.subscribe("contract.approved", lambda p: self.builder.build(str(p["contract_id"])))
         self.bus.subscribe("build.ready_for_gate", lambda p: self.publisher.gate_build(str(p["job_id"])))
         self.bus.subscribe("product.published", self._on_published)
+        self.bus.subscribe("drift.detected", lambda p: self.healer.heal(str(p["event_id"])))
+        self.bus.subscribe("patch.ready_for_gate", lambda p: self.publisher.gate_patch(str(p["job_id"])))
+
+    # -- human actions -------------------------------------------------------------------------
+    def approve_patch(self, job_id: str, user_id: str) -> dict[str, object]:
+        self.approvals.require_approver(user_id)
+        out = self.publisher.approve_patch(job_id, user_id)
+        self.bus.drain()
+        return out
+
+    def reject_patch(self, job_id: str, user_id: str) -> dict[str, object]:
+        self.approvals.require_approver(user_id)
+        out = self.publisher.reject_patch(job_id, user_id)
+        self.bus.drain()
+        return out
+
+    def simulate_drift(self) -> dict[str, object]:
+        """`make drift`: the vendor changes the feed; the ingestion check detects it; the healer runs."""
+        from tessera.seed.drift import apply_drift
+
+        applied = apply_drift(self.wh)
+        events = self.healer.check()
+        self.bus.drain()
+        return {"vendor_change": applied, "events": events}
 
     def _on_published(self, payload: dict[str, object]) -> None:
         self.semantic.refresh()
